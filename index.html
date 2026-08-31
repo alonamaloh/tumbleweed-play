@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HighNoon — Tumbleweed</title>
+<style>
+  :root { --bg:#f4efe6; --ink:#2b2620; --red:#c0392b; --white:#fdfdfb; --neutral:#8a7f6d; --hex:#e2d8c3; --hexline:#b9ad94; --hint:#7fae7f; }
+  body { margin:0; font:15px/1.4 system-ui, sans-serif; background:var(--bg); color:var(--ink); display:flex; flex-direction:column; align-items:center; }
+  h1 { font-size:20px; margin:14px 0 2px; } .sub { color:#7a7161; font-size:13px; margin-bottom:10px; }
+  #wrap { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; padding:0 12px 24px; }
+  svg { touch-action:manipulation; }
+  .panel { min-width:230px; max-width:280px; }
+  .panel .box { background:#fbf8f1; border:1px solid #d8cfba; border-radius:10px; padding:12px 14px; margin-bottom:12px; }
+  button { font:inherit; padding:6px 14px; border-radius:8px; border:1px solid #b9ad94; background:#efe7d5; cursor:pointer; }
+  button:hover { background:#e6dbc2; }
+  select, input[type=range] { font:inherit; }
+  .cell { stroke:var(--hexline); stroke-width:1; cursor:default; }
+  .cell.legal { cursor:pointer; }
+  .cell.legal:hover { stroke:#3a7d3a; stroke-width:2.5; }
+  .stack-num { font:600 15px system-ui; text-anchor:middle; dominant-baseline:central; pointer-events:none; }
+  .hintnum { font:600 11px system-ui; text-anchor:middle; dominant-baseline:central; fill:#4e7d4e; pointer-events:none; }
+  #status { font-weight:600; min-height:1.4em; }
+  .score { display:flex; justify-content:space-between; margin:2px 0; }
+  .dotr,.dotw { display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:6px; }
+  .dotr { background:var(--red); } .dotw { background:var(--white); border:1px solid #999; }
+  #evalbar { height:10px; border-radius:5px; background:linear-gradient(to right, var(--red) 50%, #ddd 50%); border:1px solid #c9bfa9; }
+  .small { font-size:12.5px; color:#7a7161; }
+  #thinking { color:#a05a2c; }
+</style>
+</head>
+<body>
+<h1>HighNoon</h1>
+<div class="sub">Tumbleweed (CodeCup 2027) — play against the engine, in your browser</div>
+<div id="wrap">
+  <svg id="board" width="560" height="520" viewBox="0 0 560 520"></svg>
+  <div class="panel">
+    <div class="box">
+      <div style="margin-bottom:8px">You play:
+        <select id="mycolor"><option value="1">Red (first)</option><option value="2">White</option></select>
+      </div>
+      <div style="margin-bottom:8px">Engine time/move:
+        <select id="tmove"><option value="200">0.2 s</option><option value="500" selected>0.5 s</option><option value="1000">1 s</option><option value="3000">3 s</option></select>
+      </div>
+      <button id="newgame">New game</button>
+    </div>
+    <div class="box">
+      <div id="status">Loading engine…</div>
+      <div id="thinking"></div>
+      <div style="margin-top:8px">
+        <div class="score"><span><span class="dotr"></span>Red territory</span><b id="sred">–</b></div>
+        <div class="score"><span><span class="dotw"></span>White territory</span><b id="swhite">–</b></div>
+      </div>
+      <div style="margin-top:10px" class="small">Engine's view (red ahead ⇠ ⇢ white ahead)</div>
+      <div id="evalbar"></div>
+    </div>
+    <div class="box small">
+      <b>Rules.</b> Place a stack on any hex seen by your stacks along straight lines. Its height = number of your stacks that see it; you need at least as many as the opponent sees there, and more than the current stack's height. Replacing works on enemy, neutral, and your own stacks. Most territory when no one can move wins. Green dots show your legal moves (number = new height).
+    </div>
+  </div>
+</div>
+<script src="hn.js"></script>
+<script>
+"use strict";
+const N=11, SIZE=27, CX=280, CY=258;
+const valid=(c,r)=> c>=0&&c<N&&r>=0&&r<N&&Math.abs(c-r)<=5;
+const idx=(c,r)=> r*11+c;
+const cellName=i=> String.fromCharCode(65+(i%11))+(Math.floor(i/11)+1);
+let M=null, myColor=1, over=true, lastMove=-1, busy=false;
+const cells=[];
+for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(valid(c,r))cells.push([c,r]);
+function xy(c,r){ const x=CX+(c-5-(r-5)/2)*SIZE*1.78, y=CY+(r-5)*SIZE*1.55; return [x,y]; }
+function hexPath(x,y){ let p=""; for(let k=0;k<6;k++){ const a=Math.PI/180*(60*k+30); p+=(k?"L":"M")+(x+SIZE*Math.cos(a)).toFixed(1)+","+(y+SIZE*Math.sin(a)).toFixed(1);} return p+"Z"; }
+const svg=document.getElementById('board');
+function draw(){
+  let s="";
+  const humanTurn = M && !over && M._hn_stm()===myColor && !busy;
+  for(const [c,r] of cells){
+    const i=idx(c,r), [x,y]=xy(c,r);
+    const own=M?M._hn_owner(i):0, h=M?M._hn_height(i):0;
+    const v = humanTurn ? M._hn_value(i) : 0;
+    let fill="var(--hex)";
+    if(own===1)fill="var(--red)"; else if(own===2)fill="var(--white)"; else if(own===3)fill="var(--neutral)";
+    s+=`<path class="cell${v>0?' legal':''}" d="${hexPath(x,y)}" fill="${fill}" data-i="${i}"${i===lastMove?' stroke="#d4a017" stroke-width="3"':''}></path>`;
+    if(own)s+=`<text class="stack-num" x="${x}" y="${y}" fill="${own===2?'#555':'#fff'}">${h}</text>`;
+    else if(v>0)s+=`<circle cx="${x}" cy="${y-8}" r="3.4" fill="var(--hint)"></circle><text class="hintnum" x="${x}" y="${y+6}">${v}</text>`;
+  }
+  svg.innerHTML=s;
+  if(M){
+    document.getElementById('sred').textContent=M._hn_score(0);
+    document.getElementById('swhite').textContent=M._hn_score(1);
+    const e=M._hn_eval()/100, p=Math.max(4,Math.min(96,50-e*2.2));
+    document.getElementById('evalbar').style.background=`linear-gradient(to right, var(--red) ${100-p}%, #ddd ${100-p}%)`;
+  }
+}
+function setStatus(t){ document.getElementById('status').textContent=t; }
+function gameOver(){
+  over=true; const r=M._hn_score(0), w=M._hn_score(1);
+  setStatus(r===w?`Game over — draw ${r}:${w}`:`Game over — ${r>w?'Red':'White'} wins ${r}:${w}${(r>w)===(myColor===1)?' — you win!':' — engine wins.'}`);
+}
+function afterMove(){
+  draw();
+  if(M._hn_score(2)){ gameOver(); return; }
+  if(!M._hn_can_move()){
+    M._hn_pass();
+    if(!M._hn_can_move()){ gameOver(); return; }
+    draw();
+  }
+  if(!over && M._hn_stm()!==myColor) engineTurn(); else setStatus("Your turn.");
+}
+function engineTurn(){
+  busy=true; setStatus("Engine thinking…"); document.getElementById('thinking').textContent="⏳";
+  setTimeout(()=>{
+    const ms=+document.getElementById('tmove').value;
+    const mv=M._hn_think(ms);
+    busy=false; document.getElementById('thinking').textContent="";
+    if(mv>=0){ lastMove=mv; setStatus(`Engine played ${cellName(mv)}. Your turn.`); }
+    else { M._hn_pass(); setStatus("Engine passed. Your turn."); }
+    afterMove();
+  }, 30);
+}
+svg.addEventListener('click', ev=>{
+  const t=ev.target.closest('.legal'); if(!t||busy||over)return;
+  const i=+t.dataset.i;
+  if(M._hn_play(i)>0){ lastMove=i; afterMove(); }
+});
+function randStart(){
+  const cell=()=>{ for(;;){ const r=1+Math.floor(Math.random()*9), c=1+Math.floor(Math.random()*9);
+    if(Math.abs(r-c)>=5||(r===5&&c===5))continue; return [c,r]; } };
+  for(;;){ const [rc,rr]=cell(), [wc,wr]=cell();
+    if(rc===wc&&rr===wr)continue;
+    if(Math.abs(rr-wr)>1||Math.abs(rc-wc)>1||rr+rc===wr+wc)return [idx(rc,rr),idx(wc,wr)]; }
+}
+function newGame(){
+  myColor=+document.getElementById('mycolor').value;
+  const [rc,wc]=randStart(); M._hn_init(rc,wc); over=false; lastMove=-1;
+  setStatus(myColor===1?"Your turn (red starts).":"Engine starts.");
+  draw();
+  if(myColor!==1) engineTurn();
+}
+document.getElementById('newgame').addEventListener('click', newGame);
+HN().then(m=>{ M=m; setStatus("Ready — press New game."); draw(); });
+draw();
+</script>
+</body>
+</html>
