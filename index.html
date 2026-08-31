@@ -143,7 +143,15 @@ function newGame(){
   if(myColor!==1) engineTurn();
 }
 document.getElementById('newgame').addEventListener('click', newGame);
-HN().then(m=>{ M=m; setStatus("Ready — press New game."); draw(); });
+HN().then(m=>{ M=m;
+  // startup self-test: fixed 6k-node search must reproduce the native engine exactly (move 86, score 2144, nodes 6144)
+  m._hn_init(26,60); const mv=m._hn_think_nodes(6000);
+  const sc=Math.round(m._hn_last(3)*256/100), nn=m._hn_last(1);
+  const ok = (mv===86 && sc===2144 && nn===6144);
+  document.getElementById('diag').textContent = ok ? "engine self-test OK" :
+    `ENGINE SELF-TEST FAILED (got move ${mv}, score ${sc}, nodes ${nn}; expected 86/2144/6144) — please report your browser: ${navigator.userAgent}`;
+  console.log("self-test", ok?"OK":"FAILED", mv, sc, nn, navigator.userAgent);
+  setStatus("Ready — press New game."); draw(); });
 draw();
 </script>
 </body>
