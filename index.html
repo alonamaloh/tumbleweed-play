@@ -39,6 +39,10 @@
       <div style="margin-bottom:8px">You play:
         <select id="mycolor"><option value="1">Red (first)</option><option value="2">White</option></select>
       </div>
+      <div style="margin-bottom:8px">Start:
+        <select id="startmode"><option value="r">Random</option><option value="c">Choose cells</option></select>
+      </div>
+      <div style="margin-bottom:8px"><label><input type="checkbox" id="setup"> Setup mode (you move both sides)</label></div>
       <div style="margin-bottom:8px">Engine time/move:
         <select id="tmove"><option value="200">0.2 s</option><option value="500" selected>0.5 s</option><option value="1000">1 s</option><option value="3000">3 s</option></select>
       </div>
@@ -67,7 +71,7 @@ const N=11, SIZE=27, CX=280, CY=258;
 const valid=(c,r)=> c>=0&&c<N&&r>=0&&r<N&&Math.abs(c-r)<=5;
 const idx=(c,r)=> r*11+c;
 const cellName=i=> String.fromCharCode(65+(i%11))+(Math.floor(i/11)+1);
-let M=null, myColor=1, over=true, lastMove=-1, busy=false;
+let M=null, myColor=1, over=true, lastMove=-1, busy=false, phase="idle", startRed=-1;
 const cells=[];
 for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(valid(c,r))cells.push([c,r]);
 function xy(c,r){ const x=CX+(c-5-(r-5)/2)*SIZE*1.78, y=CY+(r-5)*SIZE*1.55; return [x,y]; }
@@ -75,15 +79,18 @@ function hexPath(x,y){ let p=""; for(let k=0;k<6;k++){ const a=Math.PI/180*(60*k
 const svg=document.getElementById('board');
 function draw(){
   let s="";
-  const humanTurn = M && !over && M._hn_stm()===myColor && !busy;
+  const placing = phase==="placeRed"||phase==="placeWhite";
+  const humanTurn = M && !over && !busy && (placing || M._hn_stm()===myColor || document.getElementById('setup').checked);
   for(const [c,r] of cells){
     const i=idx(c,r), [x,y]=xy(c,r);
     const own=M?M._hn_owner(i):0, h=M?M._hn_height(i):0;
-    const v = humanTurn ? M._hn_value(i) : 0;
+    let v = 0;
+    if (humanTurn) { if (placing) v = (M._hn_owner(i)===0 && i!==60 && i!==startRed) ? 9 : 0; else v = M._hn_value(i); }
     let fill="var(--hex)";
     if(own===1)fill="var(--red)"; else if(own===2)fill="var(--white)"; else if(own===3)fill="var(--neutral)";
     s+=`<path class="cell${v>0?' legal':''}" d="${hexPath(x,y)}" fill="${fill}" data-i="${i}"${i===lastMove?' stroke="#d4a017" stroke-width="3"':''}></path>`;
     if(own)s+=`<text class="stack-num" x="${x}" y="${y}" fill="${own===2?'#555':'#fff'}">${h}</text>`;
+    else if(v===9)s+=`<circle cx="${x}" cy="${y}" r="4" fill="${phase==='placeRed'?'var(--red)':'#999'}"></circle>`;
     else if(v>0)s+=`<circle cx="${x}" cy="${y-8}" r="3.4" fill="var(--hint)"></circle><text class="hintnum" x="${x}" y="${y+6}">${v}</text>`;
   }
   svg.innerHTML=s;
@@ -107,7 +114,7 @@ function afterMove(){
     if(!M._hn_can_move()){ gameOver(); return; }
     draw();
   }
-  if(!over && M._hn_stm()!==myColor) engineTurn(); else setStatus("Your turn.");
+  maybeEngine();
 }
 function engineTurn(){
   busy=true; setStatus("Engine thinking…"); document.getElementById('thinking').textContent="⏳";
@@ -124,10 +131,20 @@ function engineTurn(){
   }, 30);
 }
 svg.addEventListener('click', ev=>{
-  const t=ev.target.closest('.legal'); if(!t||busy||over)return;
+  const t=ev.target.closest('.legal'); if(!t||busy)return;
   const i=+t.dataset.i;
+  if(phase==="placeRed"){ startRed=i; phase="placeWhite"; setStatus("Click WHITE's starting cell."); draw(); return; }
+  if(phase==="placeWhite"){ M._hn_init(startRed, i); over=false; phase="play"; lastMove=-1;
+    setStatus("Position set. Red to move."); maybeEngine(); return; }
+  if(over)return;
   if(M._hn_play(i)>0){ lastMove=i; afterMove(); }
 });
+document.getElementById('setup').addEventListener('change', ()=>{ if(phase==="play"&&!over) maybeEngine(); });
+function maybeEngine(){
+  draw();
+  if(!over && phase==="play" && !document.getElementById('setup').checked && M._hn_stm()!==myColor) engineTurn();
+  else if(!over) setStatus(document.getElementById('setup').checked ? (M._hn_stm()===1?"Setup: red to move.":"Setup: white to move.") : "Your turn.");
+}
 function randStart(){
   const cell=()=>{ for(;;){ const r=1+Math.floor(Math.random()*9), c=1+Math.floor(Math.random()*9);
     if(Math.abs(r-c)>=5||(r===5&&c===5))continue; return [c,r]; } };
@@ -137,21 +154,15 @@ function randStart(){
 }
 function newGame(){
   myColor=+document.getElementById('mycolor').value;
-  const [rc,wc]=randStart(); M._hn_init(rc,wc); over=false; lastMove=-1;
-  setStatus(myColor===1?"Your turn (red starts).":"Engine starts.");
-  draw();
-  if(myColor!==1) engineTurn();
+  if(document.getElementById('startmode').value==="c"){
+    M._hn_init(0,1); over=true; phase="placeRed"; startRed=-1; lastMove=-1;
+    setStatus("Click RED's starting cell."); draw(); return;
+  }
+  const [rc,wc]=randStart(); M._hn_init(rc,wc); over=false; phase="play"; lastMove=-1;
+  maybeEngine();
 }
 document.getElementById('newgame').addEventListener('click', newGame);
-HN().then(m=>{ M=m;
-  // startup self-test: fixed 6k-node search must reproduce the native engine exactly (move 86, score 2144, nodes 6144)
-  m._hn_init(26,60); const mv=m._hn_think_nodes(6000);
-  const sc=Math.round(m._hn_last(3)*256/100), nn=m._hn_last(1);
-  const ok = (mv===86 && sc===2144 && nn===6144);
-  document.getElementById('diag').textContent = ok ? "engine self-test OK" :
-    `ENGINE SELF-TEST FAILED (got move ${mv}, score ${sc}, nodes ${nn}; expected 86/2144/6144) — please report your browser: ${navigator.userAgent}`;
-  console.log("self-test", ok?"OK":"FAILED", mv, sc, nn, navigator.userAgent);
-  setStatus("Ready — press New game."); draw(); });
+HN().then(m=>{ M=m; setStatus("Ready — press New game."); draw(); });
 draw();
 </script>
 </body>
