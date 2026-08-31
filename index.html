@@ -47,6 +47,7 @@
         <select id="tmove"><option value="200">0.2 s</option><option value="500" selected>0.5 s</option><option value="1000">1 s</option><option value="3000">3 s</option></select>
       </div>
       <button id="newgame">New game</button>
+      <button id="takeback" style="margin-left:8px">Take back</button>
     </div>
     <div class="box">
       <div id="status">Loading engine…</div>
@@ -72,6 +73,7 @@ const valid=(c,r)=> c>=0&&c<N&&r>=0&&r<N&&Math.abs(c-r)<=5;
 const idx=(c,r)=> r*11+c;
 const cellName=i=> String.fromCharCode(65+(i%11))+(Math.floor(i/11)+1);
 let M=null, myColor=1, over=true, lastMove=-1, busy=false, phase="idle", startRed=-1;
+let startCells=null, hist=[];   // hist: cell index, or -1 for a pass (in move order from the start)
 const cells=[];
 for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(valid(c,r))cells.push([c,r]);
 function xy(c,r){ const x=CX+(c-5-(r-5)/2)*SIZE*1.78, y=CY+(r-5)*SIZE*1.55; return [x,y]; }
@@ -111,7 +113,7 @@ function afterMove(){
   draw();
   if(M._hn_score(2)){ gameOver(); return; }
   if(!M._hn_can_move()){
-    M._hn_pass();
+    M._hn_pass(); hist.push(-1);
     if(!M._hn_can_move()){ gameOver(); return; }
     draw();
   }
@@ -123,11 +125,11 @@ function engineTurn(){
     const ms=+document.getElementById('tmove').value;
     const mv=M._hn_think(ms);
     busy=false; document.getElementById('thinking').textContent="";
-    if(mv>=0){ lastMove=mv; setStatus(`Engine played ${cellName(mv)}. Your turn.`);
+    if(mv>=0){ lastMove=mv; hist.push(mv); setStatus(`Engine played ${cellName(mv)}. Your turn.`);
       const d=M._hn_last(0), n=M._hn_last(1), t=M._hn_last(2), sc=M._hn_last(3)/100;
       const line=M._hn_last(4)?`opening book move`:`depth ${d}, ${(n/1000).toFixed(0)}k nodes in ${(t/1000).toFixed(2)} s (${(n/t).toFixed(0)} knps), score ${sc>0?'+':''}${sc.toFixed(1)} cells for the engine`;
       document.getElementById('diag').textContent=line; console.log(line); }
-    else { M._hn_pass(); setStatus("Engine passed. Your turn."); }
+    else { M._hn_pass(); hist.push(-1); setStatus("Engine passed. Your turn."); }
     afterMove();
   }, 30);
 }
@@ -135,10 +137,25 @@ svg.addEventListener('click', ev=>{
   const t=ev.target.closest('.legal'); if(!t||busy)return;
   const i=+t.dataset.i;
   if(phase==="placeRed"){ startRed=i; phase="placeWhite"; setStatus("Click WHITE's starting cell."); draw(); return; }
-  if(phase==="placeWhite"){ M._hn_init(startRed, i); over=false; phase="play"; lastMove=-1;
+  if(phase==="placeWhite"){ M._hn_init(startRed, i); startCells=[startRed,i]; hist=[]; over=false; phase="play"; lastMove=-1;
     setStatus("Position set. Red to move."); maybeEngine(); return; }
   if(over)return;
-  if(M._hn_play(i)>0){ lastMove=i; afterMove(); }
+  if(M._hn_play(i)>0){ lastMove=i; hist.push(i); afterMove(); }
+});
+document.getElementById('takeback').addEventListener('click', ()=>{
+  if(busy||phase!=="play"||!startCells||hist.length===0)return;
+  const setup=document.getElementById('setup').checked;
+  if(setup){ hist.pop(); }
+  else {   // remove moves up to and including the human's last move
+    // whose move is entry k? red moves are the even entries only if no passes… track by replay instead:
+    let sides=[]; { let st=1; for(const h of hist){ sides.push(st); st=3-st; } }   // pass = a turn too
+    let cut=hist.length-1; while(cut>=0 && sides[cut]!==myColor) cut--;
+    if(cut<0)return; hist.length=cut;
+  }
+  M._hn_init(startCells[0], startCells[1]); over=false; lastMove=-1;
+  for(const h of hist){ if(h>=0){ M._hn_play(h); lastMove=h; } else M._hn_pass(); }
+  setStatus("Move taken back.");
+  maybeEngine();
 });
 document.getElementById('setup').addEventListener('change', ()=>{ if(phase==="play"&&!over) maybeEngine(); });
 function maybeEngine(){
@@ -159,7 +176,7 @@ function newGame(){
     M._hn_init(0,1); over=true; phase="placeRed"; startRed=-1; lastMove=-1;
     setStatus("Click RED's starting cell."); draw(); return;
   }
-  const [rc,wc]=randStart(); M._hn_init(rc,wc); over=false; phase="play"; lastMove=-1;
+  const [rc,wc]=randStart(); M._hn_init(rc,wc); startCells=[rc,wc]; hist=[]; over=false; phase="play"; lastMove=-1;
   maybeEngine();
 }
 document.getElementById('newgame').addEventListener('click', newGame);
