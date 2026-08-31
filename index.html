@@ -64,7 +64,7 @@
       <div id="evalbar"></div>
     </div>
     <div class="box small">
-      <b>Rules.</b> Place a stack on any hex seen by your stacks along straight lines. Its height = number of your stacks that see it; you need at least as many as the opponent sees there, and more than the current stack's height. Replacing works on enemy, neutral, and your own stacks. Most territory when no one can move wins. Green dots show your legal moves (number = new height).
+      <b>Rules.</b> Place a stack on any hex seen by your stacks along straight lines. Its height = number of your stacks that see it; you need at least as many as the opponent sees there, and more than the current stack's height. Replacing works on enemy, neutral, and your own stacks. Most territory when no one can move wins. Green badges show your legal moves; the number is the height the new stack would have (on occupied cells that means capturing or reinforcing).
     </div>
   </div>
 </div>
@@ -96,8 +96,8 @@ function draw(){
     s+=`<path class="cell${v>0?' legal':''}" d="${hexPath(x,y)}" fill="${fill}" data-i="${i}"></path>`;
     if(i===lastMove)s+=`<path d="${hexPath(x,y)}" fill="none" stroke="#ff9f1c" stroke-width="4.5" pointer-events="none"></path><circle cx="${x+SIZE*0.62}" cy="${y-SIZE*0.62}" r="5" fill="#ff9f1c" stroke="#7a4a00" stroke-width="1" pointer-events="none"></circle>`;
     if(own)s+=`<text class="stack-num" x="${x}" y="${y}" fill="${own===2?'#555':'#fff'}">${h}</text>`;
-    else if(v===9)s+=`<circle cx="${x}" cy="${y}" r="4" fill="${phase==='placeRed'?'var(--red)':'#999'}"></circle>`;
-    else if(v>0)s+=`<circle cx="${x}" cy="${y-8}" r="3.4" fill="var(--hint)"></circle><text class="hintnum" x="${x}" y="${y+6}">${v}</text>`;
+    if(v===9)s+=`<circle cx="${x}" cy="${y}" r="4" fill="${phase==='placeRed'?'var(--red)':'#999'}"></circle>`;
+    else if(v>0)s+=`<circle cx="${x}" cy="${y-SIZE*0.55}" r="6.5" fill="var(--hint)" stroke="#2e5c2e" stroke-width="1" pointer-events="none"></circle><text x="${x}" y="${y-SIZE*0.55}" style="font:600 9.5px system-ui" fill="#fff" text-anchor="middle" dominant-baseline="central" pointer-events="none">${v}</text>`;
   }
   svg.innerHTML=s;
   if(M){
