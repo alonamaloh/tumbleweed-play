@@ -46,6 +46,7 @@
     </div>
     <div class="box">
       <div id="status">Loading engine…</div>
+      <div id="diag" class="small" style="margin-top:6px"></div>
       <div id="thinking"></div>
       <div style="margin-top:8px">
         <div class="score"><span><span class="dotr"></span>Red territory</span><b id="sred">–</b></div>
@@ -114,7 +115,10 @@ function engineTurn(){
     const ms=+document.getElementById('tmove').value;
     const mv=M._hn_think(ms);
     busy=false; document.getElementById('thinking').textContent="";
-    if(mv>=0){ lastMove=mv; setStatus(`Engine played ${cellName(mv)}. Your turn.`); }
+    if(mv>=0){ lastMove=mv; setStatus(`Engine played ${cellName(mv)}. Your turn.`);
+      const d=M._hn_last(0), n=M._hn_last(1), t=M._hn_last(2), sc=M._hn_last(3)/100;
+      const line=`depth ${d}, ${(n/1000).toFixed(0)}k nodes in ${(t/1000).toFixed(2)} s (${(n/t).toFixed(0)} knps), score ${sc>0?'+':''}${sc.toFixed(1)} cells for the engine`;
+      document.getElementById('diag').textContent=line; console.log(line); }
     else { M._hn_pass(); setStatus("Engine passed. Your turn."); }
     afterMove();
   }, 30);
