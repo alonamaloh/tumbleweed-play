@@ -80,7 +80,7 @@ const svg=document.getElementById('board');
 function draw(){
   let s="";
   const placing = phase==="placeRed"||phase==="placeWhite";
-  const humanTurn = M && !over && !busy && (placing || M._hn_stm()===myColor || document.getElementById('setup').checked);
+  const humanTurn = M && !busy && (placing || (!over && (M._hn_stm()===myColor || document.getElementById('setup').checked)));
   for(const [c,r] of cells){
     const i=idx(c,r), [x,y]=xy(c,r);
     const own=M?M._hn_owner(i):0, h=M?M._hn_height(i):0;
