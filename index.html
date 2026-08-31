@@ -111,6 +111,7 @@ function setStatus(t){ document.getElementById('status').textContent=t; }
 function gameOver(){
   over=true; const r=M._hn_score(0), w=M._hn_score(1);
   setStatus(r===w?`Game over — draw ${r}:${w}`:`Game over — ${r>w?'Red':'White'} wins ${r}:${w}${(r>w)===(myColor===1)?' — you win!':' — engine wins.'}`);
+  draw();   // redraw without move badges
 }
 function afterMove(){
   draw();
