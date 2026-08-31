@@ -43,6 +43,9 @@
         <select id="startmode"><option value="r">Random</option><option value="c">Choose cells</option></select>
       </div>
       <div style="margin-bottom:8px"><label><input type="checkbox" id="setup"> Setup mode (you move both sides)</label></div>
+      <div style="margin-bottom:8px">Score K:
+        <select id="scorek"><option value="20" selected>20 (default)</option><option value="0">0 (pure margin)</option><option value="5">5</option><option value="10">10</option><option value="35">35</option><option value="50">50</option></select>
+      </div>
       <div style="margin-bottom:8px">Engine time/move:
         <select id="tmove"><option value="200">0.2 s</option><option value="500" selected>0.5 s</option><option value="1000">1 s</option><option value="3000">3 s</option></select>
       </div>
@@ -127,7 +130,7 @@ function engineTurn(){
     busy=false; document.getElementById('thinking').textContent="";
     if(mv>=0){ lastMove=mv; hist.push(mv); setStatus(`Engine played ${cellName(mv)}. Your turn.`);
       const d=M._hn_last(0), n=M._hn_last(1), t=M._hn_last(2), sc=M._hn_last(3)/100;
-      const line=M._hn_last(4)?`opening book move`:`depth ${d}, ${(n/1000).toFixed(0)}k nodes in ${(t/1000).toFixed(2)} s (${(n/t).toFixed(0)} knps), score ${sc>0?'+':''}${sc.toFixed(1)} cells for the engine`;
+      const line=M._hn_last(4)?`opening book move`:`depth ${d}, ${(n/1000).toFixed(0)}k nodes in ${(t/1000).toFixed(2)} s (${(n/t).toFixed(0)} knps), score ${sc>0?'+':''}${sc.toFixed(1)} for the engine (margin + K*(2p-1))`;
       document.getElementById('diag').textContent=line; console.log(line); }
     else { M._hn_pass(); hist.push(-1); setStatus("Engine passed. Your turn."); }
     afterMove();
@@ -137,7 +140,7 @@ svg.addEventListener('click', ev=>{
   const t=ev.target.closest('.legal'); if(!t||busy)return;
   const i=+t.dataset.i;
   if(phase==="placeRed"){ startRed=i; phase="placeWhite"; setStatus("Click WHITE's starting cell."); draw(); return; }
-  if(phase==="placeWhite"){ M._hn_init(startRed, i); startCells=[startRed,i]; hist=[]; over=false; phase="play"; lastMove=-1;
+  if(phase==="placeWhite"){ M._hn_init(startRed, i); applyK(); startCells=[startRed,i]; hist=[]; over=false; phase="play"; lastMove=-1;
     setStatus("Position set. Red to move."); maybeEngine(); return; }
   if(over)return;
   if(M._hn_play(i)>0){ lastMove=i; hist.push(i); afterMove(); }
@@ -152,12 +155,14 @@ document.getElementById('takeback').addEventListener('click', ()=>{
     let cut=hist.length-1; while(cut>=0 && sides[cut]!==myColor) cut--;
     if(cut<0)return; hist.length=cut;
   }
-  M._hn_init(startCells[0], startCells[1]); over=false; lastMove=-1;
+  M._hn_init(startCells[0], startCells[1]); applyK(); over=false; lastMove=-1;
   for(const h of hist){ if(h>=0){ M._hn_play(h); lastMove=h; } else M._hn_pass(); }
   setStatus("Move taken back.");
   maybeEngine();
 });
 document.getElementById('setup').addEventListener('change', ()=>{ if(phase==="play"&&!over) maybeEngine(); });
+function applyK(){ if(M) M._hn_setk(+document.getElementById('scorek').value); }
+document.getElementById('scorek').addEventListener('change', applyK);
 function maybeEngine(){
   draw();
   if(!over && phase==="play" && !document.getElementById('setup').checked && M._hn_stm()!==myColor) engineTurn();
@@ -176,7 +181,7 @@ function newGame(){
     M._hn_init(0,1); over=true; phase="placeRed"; startRed=-1; lastMove=-1;
     setStatus("Click RED's starting cell."); draw(); return;
   }
-  const [rc,wc]=randStart(); M._hn_init(rc,wc); startCells=[rc,wc]; hist=[]; over=false; phase="play"; lastMove=-1;
+  const [rc,wc]=randStart(); M._hn_init(rc,wc); applyK(); startCells=[rc,wc]; hist=[]; over=false; phase="play"; lastMove=-1;
   maybeEngine();
 }
 document.getElementById('newgame').addEventListener('click', newGame);
