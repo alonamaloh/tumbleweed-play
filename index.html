@@ -88,7 +88,8 @@ function draw(){
     if (humanTurn) { if (placing) v = (M._hn_owner(i)===0 && i!==60 && i!==startRed) ? 9 : 0; else v = M._hn_value(i); }
     let fill="var(--hex)";
     if(own===1)fill="var(--red)"; else if(own===2)fill="var(--white)"; else if(own===3)fill="var(--neutral)";
-    s+=`<path class="cell${v>0?' legal':''}" d="${hexPath(x,y)}" fill="${fill}" data-i="${i}"${i===lastMove?' stroke="#d4a017" stroke-width="3"':''}></path>`;
+    s+=`<path class="cell${v>0?' legal':''}" d="${hexPath(x,y)}" fill="${fill}" data-i="${i}"></path>`;
+    if(i===lastMove)s+=`<path d="${hexPath(x,y)}" fill="none" stroke="#ff9f1c" stroke-width="4.5" pointer-events="none"></path><circle cx="${x+SIZE*0.62}" cy="${y-SIZE*0.62}" r="5" fill="#ff9f1c" stroke="#7a4a00" stroke-width="1" pointer-events="none"></circle>`;
     if(own)s+=`<text class="stack-num" x="${x}" y="${y}" fill="${own===2?'#555':'#fff'}">${h}</text>`;
     else if(v===9)s+=`<circle cx="${x}" cy="${y}" r="4" fill="${phase==='placeRed'?'var(--red)':'#999'}"></circle>`;
     else if(v>0)s+=`<circle cx="${x}" cy="${y-8}" r="3.4" fill="var(--hint)"></circle><text class="hintnum" x="${x}" y="${y+6}">${v}</text>`;
