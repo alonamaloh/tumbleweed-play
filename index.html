@@ -55,6 +55,7 @@
     <div class="box">
       <div id="status">Loading engine…</div>
       <div id="diag" class="small" style="margin-top:6px"></div>
+      <div id="pv" class="small" style="margin-top:2px;font-family:ui-monospace,monospace"></div>
       <div id="thinking"></div>
       <div style="margin-top:8px">
         <div class="score"><span><span class="dotr"></span>Red territory</span><b id="sred">–</b></div>
@@ -131,18 +132,36 @@ function afterMove(){
   }
   maybeEngine();
 }
+function pvText(){ const L=M._hn_pv_len(); let a=[]; for(let k=0;k<L;k++)a.push(cellName(M._hn_pv(k))); return a.join(" "); }
+function searchLine(final){
+  const d=M._hn_last(0), n=M._hn_last(1), t=M._hn_last(2), sc=M._hn_last(3)/100;
+  if(M._hn_last(4)) return "opening book move";
+  return `depth ${d}, ${(n/1000).toFixed(0)}k nodes in ${(t/1000).toFixed(2)} s (${t>0?(n/t).toFixed(0):'–'} knps), score ${sc>0?'+':''}${sc.toFixed(1)} for the engine (margin + K*(2p-1))${final?'':' …'}`;
+}
+function engineFinish(mv){
+  busy=false; document.getElementById('thinking').textContent="";
+  if(mv>=0){ lastMove=mv; hist.push(mv); setStatus(`Engine played ${cellName(mv)}. Your turn.`);
+    const line=searchLine(true); document.getElementById('diag').textContent=line;
+    document.getElementById('pv').textContent=M._hn_last(4)?"":`PV: ${pvText()}`; console.log(line, "| PV", pvText()); }
+  else { M._hn_pass(); hist.push(-1); setStatus("Engine passed. Your turn."); document.getElementById('pv').textContent=""; }
+  afterMove();
+}
 function engineTurn(){
   busy=true; setStatus("Engine thinking…"); document.getElementById('thinking').textContent="⏳";
+  document.getElementById('pv').textContent="";
   setTimeout(()=>{
     const ms=+document.getElementById('tmove').value;
-    const mv=M._hn_think(ms);
-    busy=false; document.getElementById('thinking').textContent="";
-    if(mv>=0){ lastMove=mv; hist.push(mv); setStatus(`Engine played ${cellName(mv)}. Your turn.`);
-      const d=M._hn_last(0), n=M._hn_last(1), t=M._hn_last(2), sc=M._hn_last(3)/100;
-      const line=M._hn_last(4)?`opening book move`:`depth ${d}, ${(n/1000).toFixed(0)}k nodes in ${(t/1000).toFixed(2)} s (${(n/t).toFixed(0)} knps), score ${sc>0?'+':''}${sc.toFixed(1)} for the engine (margin + K*(2p-1))`;
-      document.getElementById('diag').textContent=line; console.log(line); }
-    else { M._hn_pass(); hist.push(-1); setStatus("Engine passed. Your turn."); }
-    afterMove();
+    const r=M._hn_think_start(ms);
+    if(r!==-2){ engineFinish(r); return; }          // book move (played) or no legal move
+    const step=()=>{
+      const more=M._hn_think_step();
+      const pv=pvText();
+      setStatus(`Engine thinking… depth ${M._hn_last(0)}${pv?` (${pv.split(" ")[0]})`:''}`);
+      document.getElementById('diag').textContent=searchLine(false);
+      document.getElementById('pv').textContent=pv?`PV: ${pv}`:"";
+      if(more) setTimeout(step,0); else engineFinish(M._hn_think_end());
+    };
+    setTimeout(step,0);
   }, 30);
 }
 svg.addEventListener('click', ev=>{
