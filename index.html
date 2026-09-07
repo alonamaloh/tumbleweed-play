@@ -26,6 +26,7 @@
   .dotr { background:var(--red); } .dotw { background:var(--white); border:1px solid #999; }
   #evalbar { height:10px; border-radius:5px; background:linear-gradient(to right, var(--red) 50%, #ddd 50%); border:1px solid #c9bfa9; }
   .small { font-size:12.5px; color:#7a7161; }
+  .policy-scale { height:10px; border-radius:5px; background:linear-gradient(to right, #e0ecff, #2455a4); margin:6px 0 2px; }
   #thinking { color:#a05a2c; min-height:1.5em; }
 </style>
 </head>
@@ -65,11 +66,18 @@
       <div id="evalbar"></div>
     </div>
     <div class="box small">
-      <b>Rules.</b> Place a stack on any hex seen by your stacks along straight lines. Its height = number of your stacks that see it; you need at least as many as the opponent sees there, and more than the current stack's height. Replacing works on enemy, neutral, and your own stacks. Most territory when no one can move wins. Green badges show your legal moves; the number is the height the new stack would have (on occupied cells that means capturing or reinforcing).
+      <b>Policy probability</b>
+      <div class="policy-scale"></div>
+      <div style="display:flex;justify-content:space-between"><span>0%</span><span>25%</span><span>100%</span></div>
+      <p style="margin-bottom:0">Darker move badges mean higher probability. Hover over a legal hex for its percentage. Badge numbers show the new stack height. Colors use a square-root scale to show small probabilities.</p>
+      <p style="margin-bottom:0">These are the network’s predictions before search, normalized over legal moves.</p>
+    </div>
+    <div class="box small">
+      <b>Rules.</b> Place a stack on any hex seen by your stacks along straight lines. Its height = number of your stacks that see it; you need at least as many as the opponent sees there, and more than the current stack's height. Replacing works on enemy, neutral, and your own stacks. When territory is settled, the player with more territory wins. Badges show legal moves, including captures and reinforcements on occupied cells.
     </div>
   </div>
 </div>
-<script src="hn.js?v=nn42-20260907"></script>
+<script src="hn.js?v=nn42-policy-20260907"></script>
 <script>
 "use strict";
 const N=11, SIZE=27, CX=280, CY=258;
@@ -86,6 +94,10 @@ const interior=i=>{ const c=i%11, r=Math.floor(i/11); return c>=1&&c<=9&&r>=1&&r
 const legalWhiteStart=i=>{ const c=i%11, r=Math.floor(i/11), rc=startRed%11, rr=Math.floor(startRed/11);
   return interior(i) && i!==startRed && (Math.abs(r-rr)>1 || Math.abs(c-rc)>1 || r+c!==rr+rc); };
 const svg=document.getElementById('board');
+function policyColor(p){
+  const t=Math.sqrt(Math.max(0,Math.min(1,p)));
+  return `rgb(${[224,236,255].map((v,i)=>Math.round(v+([36,85,164][i]-v)*t)).join(',')})`;
+}
 function draw(){
   let s="";
   const placing = phase==="placeRed"||phase==="placeWhite";
@@ -96,13 +108,15 @@ function draw(){
     if(placing){ if(i===60){ own=3; h=2; } else if(i===startRed){ own=1; h=1; } }   // preview: centre neutral 2, chosen red 1
     let v = 0;
     if (humanTurn) { if (placing) v = (phase==="placeRed" ? interior(i) : legalWhiteStart(i)) ? 9 : 0; else v = M._hn_value(i); }
+    const probability=v>0&&!placing?M._hn_policy(i):0;
+    const title=v>0&&!placing?`${cellName(i)}: policy ${(100*probability).toFixed(2)}%; new stack height ${v}`:cellName(i);
     let fill="var(--hex)";
     if(own===1)fill="var(--red)"; else if(own===2)fill="var(--white)"; else if(own===3)fill="var(--neutral)";
-    s+=`<path class="cell${v>0?' legal':''}" d="${hexPath(x,y)}" fill="${fill}" data-i="${i}"></path>`;
+    s+=`<path class="cell${v>0?' legal':''}" d="${hexPath(x,y)}" fill="${fill}" data-i="${i}"><title>${title}</title></path>`;
     if(i===lastMove)s+=`<path d="${hexPath(x,y)}" fill="none" stroke="#ff9f1c" stroke-width="4.5" pointer-events="none"></path><circle cx="${x+SIZE*0.62}" cy="${y-SIZE*0.62}" r="5" fill="#ff9f1c" stroke="#7a4a00" stroke-width="1" pointer-events="none"></circle>`;
     if(own)s+=`<text class="stack-num" x="${x}" y="${y}" fill="${own===2?'#555':'#fff'}">${h}</text>`;
-    if(v===9)s+=`<circle cx="${x}" cy="${y}" r="4" fill="${phase==='placeRed'?'var(--red)':'#999'}"></circle>`;
-    else if(v>0)s+=`<circle cx="${x}" cy="${y-SIZE*0.55}" r="6.5" fill="var(--hint)" stroke="#2e5c2e" stroke-width="1" pointer-events="none"></circle><text x="${x}" y="${y-SIZE*0.55}" style="font:600 9.5px system-ui" fill="#fff" text-anchor="middle" dominant-baseline="central" pointer-events="none">${v}</text>`;
+    if(placing&&v===9)s+=`<circle cx="${x}" cy="${y}" r="4" fill="${phase==='placeRed'?'var(--red)':'#999'}"></circle>`;
+    else if(v>0)s+=`<circle cx="${x}" cy="${y-SIZE*0.55}" r="7.5" fill="${policyColor(probability)}" stroke="#2455a4" stroke-width="1" pointer-events="none"></circle><text x="${x}" y="${y-SIZE*0.55}" style="font:600 9.5px system-ui" fill="${probability>.3?'#fff':'#142b4d'}" text-anchor="middle" dominant-baseline="central" pointer-events="none">${v}</text>`;
   }
   svg.innerHTML=s;
   if(M&&boardReady){
