@@ -31,7 +31,7 @@
 </head>
 <body>
 <h1>HighNoon</h1>
-<div class="sub">Tumbleweed (CodeCup 2027) — engine nn41 (2026-09-07, PUCT + NNUE)</div>
+<div class="sub">Tumbleweed (CodeCup 2027) — engine nn42 (2026-09-07, PUCT + NNUE)</div>
 <div id="wrap">
   <svg id="board" width="560" height="520" viewBox="0 0 560 520"></svg>
   <div class="panel">
@@ -69,7 +69,7 @@
     </div>
   </div>
 </div>
-<script src="hn.js?v=nn41-20260907"></script>
+<script src="hn.js?v=nn42-20260907"></script>
 <script>
 "use strict";
 const N=11, SIZE=27, CX=280, CY=258;
@@ -215,7 +215,7 @@ function newGame(){
 document.getElementById('newgame').addEventListener('click', newGame);
 HN().then(m=>{ M=m;
   m._hn_init(26,37); const mv=m._hn_think_nodes(6000);
-  const ok=(mv===38 && Math.abs(m._hn_last(3)-8081.406053)<0.1 && m._hn_last(1)===6000);
+  const ok=(mv===25 && Math.abs(m._hn_last(3)-8654.755912)<0.1 && m._hn_last(1)===6000);
   const el=document.getElementById('diag');
   el.textContent = ok ? "engine verified ✓" : `ENGINE MISCOMPUTES on this browser (${navigator.userAgent.slice(0,80)})`;
   console.log("self-test", ok, "| ua:", navigator.userAgent);
