@@ -32,7 +32,7 @@
 </head>
 <body>
 <h1>HighNoon</h1>
-<div class="sub">Tumbleweed (CodeCup 2027) — engine nn42 (2026-09-07, PUCT + NNUE)</div>
+<div class="sub">Tumbleweed (CodeCup 2027) — engine nn43 (2026-09-08, PUCT + NNUE)</div>
 <div id="wrap">
   <svg id="board" width="560" height="520" viewBox="0 0 560 520"></svg>
   <div class="panel">
@@ -47,8 +47,8 @@
       <div style="margin-bottom:8px">Score K:
         <select id="scorek"><option value="100" selected>100 (default)</option><option value="20">20</option><option value="0">0 (pure margin)</option><option value="5">5</option><option value="10">10</option><option value="35">35</option><option value="50">50</option></select>
       </div>
-      <div style="margin-bottom:8px">Engine time/move:
-        <select id="tmove"><option value="200">0.2 s</option><option value="500" selected>0.5 s</option><option value="1000">1 s</option><option value="3000">3 s</option></select>
+      <div style="margin-bottom:8px">Engine time/game:
+        <select id="tmove"><option value="5000">5 s</option><option value="10000" selected>10 s</option><option value="30000">30 s</option><option value="60000">60 s</option></select>
       </div>
       <button id="newgame">New game</button>
       <button id="takeback" style="margin-left:8px">Take back</button>
@@ -77,7 +77,7 @@
     </div>
   </div>
 </div>
-<script src="hn.js?v=nn42-policy-20260907"></script>
+<script src="hn.js?v=nn43-extension-20260908"></script>
 <script>
 "use strict";
 const N=11, SIZE=27, CX=280, CY=258;
@@ -165,7 +165,7 @@ function engineTurn(){
   document.getElementById('pv').textContent="";
   setTimeout(()=>{
     const ms=+document.getElementById('tmove').value;
-    const r=M._hn_think_start(ms);
+    const r=M._hn_think_game_start(ms);
     if(r!==-2){ engineFinish(r); return; }          // book move (played) or no legal move
     const step=()=>{
       const more=M._hn_think_step();
