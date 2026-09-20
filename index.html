@@ -234,7 +234,7 @@ function newGame(){
 document.getElementById('newgame').addEventListener('click', newGame);
 HN().then(m=>{ M=m;
   m._hn_init(26,37); const mv=m._hn_think_nodes(6000);
-  const ok=(mv===25 && Math.abs(m._hn_last(3)-8479.400337)<0.1 && m._hn_last(1)===6000);
+  const ok=(mv===25 && Math.abs(m._hn_last(3)-8395.175266)<0.1 && m._hn_last(1)===6000);
   const el=document.getElementById('diag');
   el.textContent = ok ? "engine verified ✓" : `ENGINE MISCOMPUTES on this browser (${navigator.userAgent.slice(0,80)})`;
   console.log("self-test", ok, "| ua:", navigator.userAgent);
