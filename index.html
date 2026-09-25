@@ -56,7 +56,7 @@
       <div style="margin-top:8px">
         <div class="score"><span><span class="dotr"></span>Red territory</span><b id="sred">–</b></div>
         <div class="score"><span><span class="dotw"></span>White territory</span><b id="swhite">–</b></div>
-        <div class="small" style="margin-top:6px">Decided cells carry a dot in the owner's colour; empty decided cells are tinted.</div>
+        <div class="small" style="margin-top:6px">Decided cells carry a padlock in the owner's colour; empty decided cells are tinted.</div>
       </div>
     </div>
     <div class="box small">
@@ -76,6 +76,11 @@ let startCells=null, hist=[];   // hist: cell index, or -1 for a pass (in move o
 const cells=[];
 for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(valid(c,r))cells.push([c,r]);
 function xy(c,r){ const x=CX+(c-5-(r-5)/2)*SIZE*1.78, y=CY+(r-5)*SIZE*1.55; return [x,y]; }
+function lockIcon(x,y,fill){   // a small padlock centred near (x,y): shackle arc plus body
+  const w=9,h=7,r=3;
+  return `<g pointer-events="none"><path d="M${(x-r).toFixed(1)},${(y-1).toFixed(1)} v-2.5 a${r},${r} 0 0 1 ${2*r},0 v2.5" fill="none" stroke="#333" stroke-width="1.6"></path>`+
+         `<rect x="${(x-w/2).toFixed(1)}" y="${(y-1).toFixed(1)}" width="${w}" height="${h}" rx="1.5" fill="${fill}" stroke="#333" stroke-width="1"></rect></g>`;
+}
 function hexPath(x,y){ let p=""; for(let k=0;k<6;k++){ const a=Math.PI/180*(60*k+30); p+=(k?"L":"M")+(x+SIZE*Math.cos(a)).toFixed(1)+","+(y+SIZE*Math.sin(a)).toFixed(1);} return p+"Z"; }
 const interior=i=>{ const c=i%11, r=Math.floor(i/11); return c>=1&&c<=9&&r>=1&&r<=9&&Math.abs(c-r)<5&&i!==60; };
 const legalWhiteStart=i=>{ const c=i%11, r=Math.floor(i/11), rc=startRed%11, rr=Math.floor(startRed/11);
@@ -97,7 +102,7 @@ function draw(){
     if(own===1)fill="var(--red)"; else if(own===2)fill="var(--white)"; else if(own===3)fill="var(--neutral)";
     else if(terr===1)fill="var(--redterr)"; else if(terr===2)fill="var(--whiteterr)";
     s+=`<path class="cell${v>0?' legal':''}" d="${hexPath(x,y)}" fill="${fill}" data-i="${i}"><title>${title}</title></path>`;
-    if(terr===1||terr===2)s+=`<circle cx="${x-SIZE*0.55}" cy="${y+SIZE*0.55}" r="4" fill="${terr===1?'var(--red)':'var(--white)'}" stroke="#333" stroke-width="1" pointer-events="none"></circle>`;
+    if(terr===1||terr===2)s+=lockIcon(x-SIZE*0.5,y+SIZE*0.5,terr===1?'var(--red)':'var(--white)');   // decided cell: a padlock in the owner's colour
     if(i===lastMove)s+=`<path d="${hexPath(x,y)}" fill="none" stroke="#ff9f1c" stroke-width="4.5" pointer-events="none"></path><circle cx="${x+SIZE*0.62}" cy="${y-SIZE*0.62}" r="5" fill="#ff9f1c" stroke="#7a4a00" stroke-width="1" pointer-events="none"></circle>`;
     if(own)s+=`<text class="stack-num" x="${x}" y="${y}" fill="${own===2?'#555':'#fff'}">${h}</text>`;
     if(placing&&v===9)s+=`<circle cx="${x}" cy="${y}" r="4" fill="${phase==='placeRed'?'var(--red)':'#999'}"></circle>`;
