@@ -22,8 +22,6 @@
   .hintnum { font:600 11px system-ui; text-anchor:middle; dominant-baseline:central; fill:#4e7d4e; pointer-events:none; }
   #status { font-weight:600; min-height:1.4em; }
   .score { display:flex; justify-content:space-between; margin:2px 0; }
-  .dotr,.dotw { display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:6px; }
-  .dotr { background:var(--red); } .dotw { background:var(--white); border:1px solid #999; }
   .small { font-size:12.5px; color:#7a7161; }
   #thinking { color:#a05a2c; min-height:1.5em; }
 </style>
@@ -52,9 +50,9 @@
       <div id="status">Loading engine…</div>
       <div id="thinking"></div>
       <div style="margin-top:8px">
-        <div class="score"><span><span class="dotr"></span>Red territory</span><b id="sred">–</b></div>
-        <div class="score"><span><span class="dotw"></span>White territory</span><b id="swhite">–</b></div>
-        <div class="small" style="margin-top:6px">Decided cells carry a padlock in the owner's colour; empty decided cells are tinted.</div>
+        <div class="score"><span><svg width="14" height="14" viewBox="-7 -7 14 14" style="vertical-align:-2px;margin-right:6px"><path d="M-3,-1 v-2.5 a3,3 0 0 1 6,0 v2.5" fill="none" stroke="#333" stroke-width="1.6"></path><rect x="-4.5" y="-1" width="9" height="7" rx="1.5" fill="var(--red)" stroke="#333" stroke-width="1"></rect></svg>Red territory</span><b id="sred">–</b></div>
+        <div class="score"><span><svg width="14" height="14" viewBox="-7 -7 14 14" style="vertical-align:-2px;margin-right:6px"><path d="M-3,-1 v-2.5 a3,3 0 0 1 6,0 v2.5" fill="none" stroke="#333" stroke-width="1.6"></path><rect x="-4.5" y="-1" width="9" height="7" rx="1.5" fill="var(--white)" stroke="#333" stroke-width="1"></rect></svg>White territory</span><b id="swhite">–</b></div>
+        <div class="small" style="margin-top:6px">Decided cells carry the padlock of their owner; empty decided cells are tinted.</div>
       </div>
     </div>
     <div class="box small">
