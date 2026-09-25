@@ -134,7 +134,7 @@ function setStatus(t){ document.getElementById('status').textContent=t; }
 function pvText(){ const L=M._hn_pv_len(); const a=[]; for(let k=0;k<L;k++)a.push(cellName(M._hn_pv(k))); return a.join(" "); }
 function showReport(){   // the search that produced the engine's last move (score from the engine's side)
   const d=M._hn_last(0), n=M._hn_last(1), t=M._hn_last(2), sc=M._hn_last(3)/100, nps=M._hn_last(4);
-  document.getElementById('report').textContent=`depth ${d}, ${n.toLocaleString()} nodes in ${(t/1000).toFixed(2)} s (${(nps/1000).toFixed(0)} knps)\nscore ${sc>0?'+':''}${sc.toFixed(1)} cells for the engine\nPV: ${pvText()}`;
+  document.getElementById('report').textContent=`depth ${d}, ${n.toLocaleString()} nodes in ${(t/1000).toFixed(2)} s (${(nps/1000).toFixed(0)} knps)\nscore ${sc>0?"+":""}${sc.toFixed(1)}\nPV: ${pvText()}`;
 }
 function showEval(){   // static value of the position from the value head, red's view
   if(!M||!boardReady){ document.getElementById('evaltext').textContent=""; document.getElementById('evalbar').style.background="#ddd"; return; }
