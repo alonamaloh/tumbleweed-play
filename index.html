@@ -144,9 +144,9 @@ function afterMove(){
 }
 function pvText(){ const L=M._hn_pv_len(); let a=[]; for(let k=0;k<L;k++)a.push(cellName(M._hn_pv(k))); return a.join(" "); }
 function searchLine(final){
-  const d=M._hn_last(0), n=M._hn_last(1), t=M._hn_last(2), sc=M._hn_last(3)/100;
-  if(M._hn_last(4)) return "instant reply";
-  return `thought for ${(t/1000).toFixed(1)} s, score ${sc>0?'+':''}${sc.toFixed(1)} for the engine${final?'':' …'}`;
+  const sc=M._hn_last(3)/100;
+  if(M._hn_last(4)) return "";
+  return `score ${sc>0?'+':''}${sc.toFixed(1)} for the engine${final?'':' …'}`;
 }
 function engineFinish(mv){
   busy=false; document.getElementById('thinking').textContent="";
