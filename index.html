@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HighNoon — Tumbleweed</title>
 <style>
-  :root { --bg:#f4efe6; --ink:#2b2620; --red:#c0392b; --white:#fdfdfb; --neutral:#8a7f6d; --hex:#e2d8c3; --hexline:#b9ad94; --hint:#7fae7f; }
+  :root { --bg:#f4efe6; --ink:#2b2620; --red:#c0392b; --white:#fdfdfb; --neutral:#8a7f6d; --hex:#e2d8c3; --redterr:#f2c4c4; --whiteterr:#e6e6e6; --hexline:#b9ad94; --hint:#7fae7f; }
   body { margin:0; font:15px/1.4 system-ui, sans-serif; background:var(--bg); color:var(--ink); display:flex; flex-direction:column; align-items:center; }
   h1 { font-size:20px; margin:14px 0 2px; } .sub { color:#7a7161; font-size:13px; margin-bottom:10px; }
   #wrap { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; align-items:flex-start; padding:0 12px 24px; }
@@ -56,6 +56,7 @@
       <div style="margin-top:8px">
         <div class="score"><span><span class="dotr"></span>Red territory</span><b id="sred">–</b></div>
         <div class="score"><span><span class="dotw"></span>White territory</span><b id="swhite">–</b></div>
+        <div class="small" style="margin-top:6px">Decided cells carry a dot in the owner's colour; empty decided cells are tinted.</div>
       </div>
     </div>
     <div class="box small">
@@ -63,7 +64,7 @@
     </div>
   </div>
 </div>
-<script src="hn.js?v=mc006-2"></script>
+<script src="hn.js?v=mc006-3"></script>
 <script>
 "use strict";
 const N=11, SIZE=27, CX=280, CY=258;
@@ -92,8 +93,11 @@ function draw(){
     if (humanTurn) { if (placing) v = (phase==="placeRed" ? interior(i) : legalWhiteStart(i)) ? 9 : 0; else v = M._hn_value(i); }
     const title=cellName(i);
     let fill="var(--hex)";
+    const terr=(M&&boardReady)?M._hn_territory(i):0;   // decided territory under the judge's rule: 1 red, 2 white
     if(own===1)fill="var(--red)"; else if(own===2)fill="var(--white)"; else if(own===3)fill="var(--neutral)";
+    else if(terr===1)fill="var(--redterr)"; else if(terr===2)fill="var(--whiteterr)";
     s+=`<path class="cell${v>0?' legal':''}" d="${hexPath(x,y)}" fill="${fill}" data-i="${i}"><title>${title}</title></path>`;
+    if(terr===1||terr===2)s+=`<circle cx="${x-SIZE*0.55}" cy="${y+SIZE*0.55}" r="4" fill="${terr===1?'var(--red)':'var(--white)'}" stroke="#333" stroke-width="1" pointer-events="none"></circle>`;
     if(i===lastMove)s+=`<path d="${hexPath(x,y)}" fill="none" stroke="#ff9f1c" stroke-width="4.5" pointer-events="none"></path><circle cx="${x+SIZE*0.62}" cy="${y-SIZE*0.62}" r="5" fill="#ff9f1c" stroke="#7a4a00" stroke-width="1" pointer-events="none"></circle>`;
     if(own)s+=`<text class="stack-num" x="${x}" y="${y}" fill="${own===2?'#555':'#fff'}">${h}</text>`;
     if(placing&&v===9)s+=`<circle cx="${x}" cy="${y}" r="4" fill="${phase==='placeRed'?'var(--red)':'#999'}"></circle>`;
