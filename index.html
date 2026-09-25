@@ -15,11 +15,12 @@
   @media (orientation: landscape) and (min-width: 640px) {
     #wrap { flex-direction:row; }
     /* the board keeps its 560:520 aspect ratio: limited by the height left under the header, or by the width next to the panel */
-    svg#board { width:min(calc((100vh - 84px) * 1.077), calc(100vw - 350px)); }
+    /* 100dvh is the visible height on phones and tablets (the browser bars come and go); vh is the fallback */
+    svg#board { width:min(calc((100vh - 120px) * 1.077), calc(100vw - 350px)); width:min(calc((100dvh - 120px) * 1.077), calc(100vw - 350px)); }
   }
   @media (orientation: portrait), (max-width: 639px) {
     #wrap { flex-direction:column; align-items:center; }
-    svg#board { width:min(100vw - 16px, calc((100vh - 84px) * 1.077)); }
+    svg#board { width:min(100vw - 16px, calc((100vh - 120px) * 1.077)); width:min(100vw - 16px, calc((100dvh - 120px) * 1.077)); }
     .panel { width:min(100%, 560px); }
   }
   .panel .box { background:#fbf8f1; border:1px solid #d8cfba; border-radius:10px; padding:12px 14px; margin-bottom:12px; }
