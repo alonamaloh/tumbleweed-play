@@ -41,7 +41,7 @@
 </head>
 <body>
 <h1>HighNoon 8</h1>
-<div class="sub">Tumbleweed on the side-8 board (169 cells), CodeCup rules — alpha-beta engine <span id="netname">ab004</span>, work in progress</div>
+<div class="sub">Tumbleweed on the side-8 board (169 cells), CodeCup rules — alpha-beta engine <span id="netname">ab005</span>, work in progress</div>
 <div id="wrap">
   <svg id="board" width="560" height="520" viewBox="0 0 560 520"></svg>
   <div class="panel">
@@ -76,10 +76,10 @@
     </div>
   </div>
 </div>
-<script src="hn8.js?v=ab004"></script>
+<script src="hn8.js?v=ab005"></script>
 <script>
 "use strict";
-const SELFTEST_RED=79, SELFTEST_WHITE=176, SELFTEST_MOVE=159, SELFTEST_NODES=6144, SELFTEST_SCORE=1862.500000;   // set by tw8/tools/build_web8.sh from the native build
+const SELFTEST_RED=79, SELFTEST_WHITE=176, SELFTEST_MOVE=85, SELFTEST_NODES=3696, SELFTEST_SCORE=2608.203125;   // set by tw8/tools/build_web8.sh from the native build
 const SIDE=8, N=2*SIDE-1, M0=SIDE-1, CENTRE=M0*N+M0, SIZE=19.5, CX=280, CY=258;
 const valid=(c,r)=> c>=0&&c<N&&r>=0&&r<N&&Math.abs(c-r)<=M0;
 const idx=(c,r)=> r*N+c;
