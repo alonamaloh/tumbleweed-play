@@ -132,16 +132,10 @@ function afterMove(){
   }
   maybeEngine();
 }
-function searchLine(final){
-  const sc=M._hn_last(3)/100;
-  if(M._hn_last(4)) return "";
-  return `score ${sc>0?'+':''}${sc.toFixed(1)} for the engine${final?'':' …'}`;
-}
 function engineFinish(mv){
   busy=false; document.getElementById('thinking').textContent="";
   if(mv>=0){ lastMove=mv; hist.push(mv); setStatus(`Engine played ${cellName(mv)}. Your turn.`);
-    const line=searchLine(true); document.getElementById('diag').textContent=line;
-    console.log(line); }
+    document.getElementById('diag').textContent=""; }
   else { M._hn_pass(); hist.push(-1); setStatus("Engine passed. Your turn."); }
   afterMove();
 }
@@ -155,7 +149,6 @@ function engineTurn(){
     const step=()=>{
       const more=M._hn_think_step();
       setStatus("Engine thinking…");
-      document.getElementById('diag').textContent=searchLine(false);
       if(more) setTimeout(step,0); else engineFinish(M._hn_think_end());
     };
     setTimeout(step,0);
