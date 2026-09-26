@@ -54,7 +54,7 @@
       </div>
       <div style="margin-bottom:8px"><label><input type="checkbox" id="setup"> Setup mode (you move both sides)</label></div>
       <div style="margin-bottom:8px">Nodes per move:
-        <select id="tmove"><option value="10000">10k</option><option value="30000">30k</option><option value="100000" selected>100k</option><option value="300000">300k</option><option value="1000000">1M</option><option value="3000000">3M</option></select>
+        <select id="tmove"><option value="-1">depth 1</option><option value="-2">depth 2</option><option value="10000">10k</option><option value="30000">30k</option><option value="100000" selected>100k</option><option value="300000">300k</option><option value="1000000">1M</option><option value="3000000">3M</option></select>
       </div>
       <button id="newgame">New game</button>
       <button id="takeback" style="margin-left:8px">Take back</button>
@@ -76,7 +76,7 @@
     </div>
   </div>
 </div>
-<script src="hn8.js?v=ab014b-9bea45b6"></script>
+<script src="hn8.js?v=ab014b-73e9f4e9"></script>
 <script>
 "use strict";
 const SELFTEST_RED=79, SELFTEST_WHITE=176, SELFTEST_MOVE=85, SELFTEST_NODES=4309, SELFTEST_SCORE=2941.015625;   // set by tw8/tools/build_web8.sh from the native build
