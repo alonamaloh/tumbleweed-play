@@ -76,7 +76,7 @@
     </div>
   </div>
 </div>
-<script src="hn8.js?v=ab013-492e75cf"></script>
+<script src="hn8.js?v=ab013-0d31e389"></script>
 <script>
 "use strict";
 const SELFTEST_RED=79, SELFTEST_WHITE=176, SELFTEST_MOVE=85, SELFTEST_NODES=6144, SELFTEST_SCORE=2809.765625;   // set by tw8/tools/build_web8.sh from the native build
@@ -165,9 +165,12 @@ function engineFinish(mv){
 }
 function engineTurn(){
   busy=true; setStatus("Engine thinking…"); document.getElementById('thinking').textContent="⏳";
-  setTimeout(()=>{
+  setTimeout(()=>{   // one deepening iteration per timeslice, so the report updates after every depth
     const nodes=+document.getElementById('tmove').value;
-    engineFinish(M._hn_think_nodes(nodes));
+    if(!M._hn_think_begin(nodes)){ engineFinish(M._hn_think_end()); return; }
+    showReport();
+    const step=()=>{ if(M._hn_think_step()){ showReport(); setTimeout(step,0); } else engineFinish(M._hn_think_end()); };
+    setTimeout(step,0);
   }, 30);
 }
 svg.addEventListener('click', ev=>{
