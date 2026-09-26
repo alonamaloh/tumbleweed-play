@@ -77,7 +77,7 @@
     </div>
   </div>
 </div>
-<script src="hn8.js?v=ab009"></script>
+<script src="hn8.js?v=ab009-52841cc3"></script>
 <script>
 "use strict";
 const SELFTEST_RED=79, SELFTEST_WHITE=176, SELFTEST_MOVE=143, SELFTEST_NODES=3880, SELFTEST_SCORE=2292.968750;   // set by tw8/tools/build_web8.sh from the native build
@@ -236,7 +236,9 @@ HN().then(m=>{ M=m;
   W.onmessage=e=>{ const r=e.data;
     if(r.type==='move'){ if(r.id!==thinkId)return; if(r.move>=0) M._hn_play(r.move); document.getElementById('report').textContent=reportText(r.report,""); engineFinish(r.move); }
     else if(r.type==='analysis'){ if(r.id!==anId)return; anBest=r.move; document.getElementById('report').textContent=reportText(r,`analysis at ${(r.budget/1000).toFixed(0)}k nodes${r.done?' (done)':'…'}\n`); if(r.done)document.getElementById('thinking').textContent=""; draw(); }
-    else if(r.type==='ready'){ setStatus("Ready — press New game."); } };
+    else if(r.type==='ready'){ setStatus("Ready — press New game."); }
+    else if(r.type==='error'){ document.getElementById('report').textContent='engine error: '+r.message; document.getElementById('thinking').textContent=''; } };
+  W.onerror=e=>{ document.getElementById('report').textContent='worker error: '+(e.message||e); document.getElementById('thinking').textContent=''; };
   draw(); });
 draw();
 </script>
