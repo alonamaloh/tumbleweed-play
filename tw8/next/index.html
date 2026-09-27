@@ -144,7 +144,6 @@ function showReport(){   // the search that produced the engine's last move (sco
   const d=M._hn_last(0), n=M._hn_last(1), t=M._hn_last(2), sc=M._hn_last(3)/100, nps=M._hn_last(4);
   document.getElementById('report').textContent=`depth ${d}, ${n.toLocaleString()} nodes in ${(t/1000).toFixed(2)} s (${(nps/1000).toFixed(0)} knps)\nscore ${sc>0?"+":""}${sc.toFixed(1)}\nPV: ${pvText()}`;
 }
-const ANALYSIS_NODES=30000000;   // analysis thinks up to 30M nodes, whatever "Nodes per move" says (user 2026-09-27)
 let AW=null, analysisGen=0, analysisBusy=false, analysisBest=-1;   // analysisBest: the best move of the running analysis of the position on the board (-1: none yet)   // analysis worker (a second engine instance); the newest position wins
 function newAnalysisWorker(){
   const w=new Worker('analysis-worker.js?v=ab015-962c6d9a');
@@ -163,7 +162,7 @@ function updateAnalysis(){   // analysis mode (user 2026-09-27): the human moves
   if(!on) return;
   if(!AW) AW=newAnalysisWorker();
   analysisBusy=true;
-  AW.postMessage({type:'analyse',gen:analysisGen,red:startCells[0],white:startCells[1],moves:hist.slice(),nodes:ANALYSIS_NODES});
+  AW.postMessage({type:'analyse',gen:analysisGen,red:startCells[0],white:startCells[1],moves:hist.slice(),nodes:+document.getElementById('tmove').value});   // the selected nodes per move (user 2026-09-27)
 }
 function gameOver(){
   over=true; const r=M._hn_score(0), w=M._hn_score(1);
@@ -215,6 +214,7 @@ document.getElementById('takeback').addEventListener('click', ()=>{   // one mov
   setStatus("Move taken back.");
   maybeEngine();
 });
+document.getElementById('tmove').addEventListener('change', ()=>{ if(document.getElementById('analysis').checked) updateAnalysis(); });   // a new budget restarts the analysis
 document.getElementById('analysis').addEventListener('change', ()=>{   // leaving analysis mode hands the side to move to the engine
   if(phase!=="play"||over){ updateAnalysis(); return; } if(!document.getElementById('analysis').checked) myColor=3-M._hn_stm(); maybeEngine(); });
 document.getElementById('move').addEventListener('click', ()=>{
