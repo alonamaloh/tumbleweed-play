@@ -74,10 +74,10 @@
     </div>
   </div>
 </div>
-<script src="../hn8.js?v=ab015-fe64c3ae"></script>
+<script src="../hn8.js?v=ab015-2f6a9eb4"></script>
 <script>
 "use strict";
-const SELFTEST_RED=79, SELFTEST_WHITE=176, SELFTEST_MOVE=85, SELFTEST_NODES=6144, SELFTEST_SCORE=2762.500000;   // set by tw8/tools/build_web8.sh from the native build
+const SELFTEST_RED=79, SELFTEST_WHITE=176, SELFTEST_MOVE=85, SELFTEST_NODES=6144, SELFTEST_SCORE=1628.906250;   // set by tw8/tools/build_web8.sh from the native build
 const SIDE=8, N=2*SIDE-1, M0=SIDE-1, CENTRE=M0*N+M0, SIZE=19.5, CX=280, CY=258;
 const valid=(c,r)=> c>=0&&c<N&&r>=0&&r<N&&Math.abs(c-r)<=M0;
 const idx=(c,r)=> r*N+c;
@@ -148,7 +148,7 @@ let SW=null, searchGen=0, searchBusy=false, searchPlay=false, searchSide="", ana
 function report(row,text){ document.getElementById('r_'+row).textContent=text; }
 const signed=x=>(x>0?"+":"")+x.toFixed(1);
 function newSearchWorker(){
-  const w=new Worker('search-worker.js?v=ab015-fe64c3ae');
+  const w=new Worker('search-worker.js?v=ab015-2f6a9eb4');
   w.onmessage=ev=>{ const d=ev.data; if(d.gen!==searchGen) return;
     if(d.type==='move'){ report('head',`depth ${d.depth}: ${d.index}/${d.count} ${cellName(d.move)}`); return; }
     if(d.type==='best'||d.type==='done'){
