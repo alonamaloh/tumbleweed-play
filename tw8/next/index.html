@@ -46,15 +46,15 @@
   <svg id="board" width="560" height="520" viewBox="0 0 560 520"></svg>
   <div class="panel">
     <div class="box">
-      <div style="margin-bottom:8px">Start:
-        <select id="startmode"><option value="r">Random</option><option value="c">Choose cells</option></select>
+      <div style="margin-bottom:8px">
+        <button id="newgame">New game</button>
+        <select id="startmode" style="margin-left:8px"><option value="r">Random</option><option value="c">Choose cells</option></select>
       </div>
       <div style="margin-bottom:8px"><label><input type="checkbox" id="analysis"> Analysis mode</label></div>
       <div style="margin-bottom:8px">Nodes per move:
         <select id="tmove"><option value="10000">10k</option><option value="30000">30k</option><option value="100000" selected>100k</option><option value="300000">300k</option><option value="1000000">1M</option><option value="3000000">3M</option></select>
       </div>
-      <button id="newgame">New game</button>
-      <button id="move" style="margin-left:8px">Move!</button>
+      <button id="move">Move!</button>
       <button id="takeback" style="margin-left:8px">Take back</button>
     </div>
     <div class="box">
@@ -145,11 +145,12 @@ function showReport(){   // the search that produced the engine's last move (sco
   document.getElementById('report').textContent=`depth ${d}, ${n.toLocaleString()} nodes in ${(t/1000).toFixed(2)} s (${(nps/1000).toFixed(0)} knps)\nscore ${sc>0?"+":""}${sc.toFixed(1)}\nPV: ${pvText()}`;
 }
 const ANALYSIS_NODES=30000000;   // analysis thinks up to 30M nodes, whatever "Nodes per move" says (user 2026-09-27)
-let AW=null, analysisGen=0, analysisBusy=false;   // analysis worker (a second engine instance); the newest position wins
+let AW=null, analysisGen=0, analysisBusy=false, analysisBest=-1;   // analysisBest: the best move of the running analysis of the position on the board (-1: none yet)   // analysis worker (a second engine instance); the newest position wins
 function newAnalysisWorker(){
   const w=new Worker('analysis-worker.js?v=ab015-962c6d9a');
   w.onmessage=ev=>{ const d=ev.data; if(d.type!=='report'||d.gen!==analysisGen) return;
     if(d.done) analysisBusy=false;
+    if(d.depth>=1 && d.pv.length) analysisBest=d.pv[0];
     if(d.nomove){ document.getElementById('report').textContent="Analysis: no legal move."; return; }
     const side=d.stm===1?"red":"white";
     document.getElementById('report').textContent=`Analysis, ${side} to move${d.done?"":" (thinking…)"}: depth ${d.depth}, ${d.nodes.toLocaleString()} nodes in ${(d.ms/1000).toFixed(2)} s (${(d.nps/1000).toFixed(0)} knps)\nscore ${d.score>0?"+":""}${d.score.toFixed(1)} for ${side}\nPV: ${d.pv.map(cellName).join(" ")}`; };
@@ -157,7 +158,7 @@ function newAnalysisWorker(){
 }
 function updateAnalysis(){   // analysis mode (user 2026-09-27): the human moves both sides and the engine analyses the position; otherwise stop
   const on=document.getElementById('analysis').checked && boardReady && phase==="play" && !over && !busy;
-  analysisGen++;
+  analysisGen++; analysisBest=-1;
   if(AW && analysisBusy){ AW.terminate(); AW=null; analysisBusy=false; }   // a deep iteration takes many seconds: drop the worker instead of waiting for it
   if(!on) return;
   if(!AW) AW=newAnalysisWorker();
@@ -216,8 +217,15 @@ document.getElementById('takeback').addEventListener('click', ()=>{   // one mov
 });
 document.getElementById('analysis').addEventListener('change', ()=>{   // leaving analysis mode hands the side to move to the engine
   if(phase!=="play"||over){ updateAnalysis(); return; } if(!document.getElementById('analysis').checked) myColor=3-M._hn_stm(); maybeEngine(); });
-document.getElementById('move').addEventListener('click', ()=>{   // the engine takes over the side to move and keeps it
-  if(busy||phase!=="play"||over)return; document.getElementById('analysis').checked=false; myColor=3-M._hn_stm(); maybeEngine();
+document.getElementById('move').addEventListener('click', ()=>{
+  if(busy||phase!=="play"||over)return;
+  if(document.getElementById('analysis').checked){   // analysis mode: play the current best move of the analysis and keep analysing
+    if(analysisBest<0){ setStatus("The analysis has no move yet."); return; }
+    const mv=analysisBest;
+    if(M._hn_play(mv)>0){ lastMove=mv; hist.push(mv); afterMove(); }
+    return;
+  }
+  myColor=3-M._hn_stm(); maybeEngine();   // normal play: the engine takes over the side to move and keeps it
 });
 function maybeEngine(){
   draw();
