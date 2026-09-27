@@ -74,7 +74,7 @@
     </div>
   </div>
 </div>
-<script src="../hn8.js?v=ab015-1925e751"></script>
+<script src="../hn8.js?v=ab015-fe64c3ae"></script>
 <script>
 "use strict";
 const SELFTEST_RED=79, SELFTEST_WHITE=176, SELFTEST_MOVE=85, SELFTEST_NODES=6144, SELFTEST_SCORE=2762.500000;   // set by tw8/tools/build_web8.sh from the native build
@@ -148,11 +148,11 @@ let SW=null, searchGen=0, searchBusy=false, searchPlay=false, searchSide="", ana
 function report(row,text){ document.getElementById('r_'+row).textContent=text; }
 const signed=x=>(x>0?"+":"")+x.toFixed(1);
 function newSearchWorker(){
-  const w=new Worker('search-worker.js?v=ab015-1925e751');
+  const w=new Worker('search-worker.js?v=ab015-fe64c3ae');
   w.onmessage=ev=>{ const d=ev.data; if(d.gen!==searchGen) return;
     if(d.type==='move'){ report('head',`depth ${d.depth}: ${d.index}/${d.count} ${cellName(d.move)}`); return; }
     if(d.type==='best'||d.type==='done'){
-      if(d.pv.length){ report('score',`score ${signed(d.score)} for ${searchSide}`); report('pv',`PV ${d.pv.map(cellName).join(" ")}`); if(!searchPlay) analysisBest=d.pv[0]; }
+      if(d.pv.length){ report('score',`score ${['','≥ ','≤ '][d.bound||0]}${signed(d.score)} for ${searchSide}`); report('pv',`PV ${d.pv.map(cellName).join(" ")}`); if(!searchPlay) analysisBest=d.pv[0]; }
     }
     if(d.type==='done'){
       searchBusy=false;
