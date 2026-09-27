@@ -49,8 +49,7 @@
       <div style="margin-bottom:8px">Start:
         <select id="startmode"><option value="r">Random</option><option value="c">Choose cells</option></select>
       </div>
-      <div style="margin-bottom:8px"><label><input type="checkbox" id="setup"> Setup mode (you move both sides)</label></div>
-      <div style="margin-bottom:8px"><label><input type="checkbox" id="analysis"> Analysis mode (the engine thinks on your turn too)</label></div>
+      <div style="margin-bottom:8px"><label><input type="checkbox" id="analysis"> Analysis mode</label></div>
       <div style="margin-bottom:8px">Nodes per move:
         <select id="tmove"><option value="10000">10k</option><option value="30000">30k</option><option value="100000" selected>100k</option><option value="300000">300k</option><option value="1000000">1M</option><option value="3000000">3M</option></select>
       </div>
@@ -98,7 +97,7 @@ const svg=document.getElementById('board');
 function draw(){
   let s="";
   const placing = phase==="placeRed"||phase==="placeWhite";
-  const humanTurn = M && !busy && (placing || (boardReady && !over && (M._hn_stm()===myColor || document.getElementById('setup').checked)));
+  const humanTurn = M && !busy && (placing || (boardReady && !over && (M._hn_stm()===myColor || document.getElementById('analysis').checked)));
   for(const [c,r] of cells){
     const i=idx(c,r), [x,y]=xy(c,r);
     let own=(M&&boardReady)?M._hn_owner(i):0, h=(M&&boardReady)?M._hn_height(i):0;
@@ -156,7 +155,7 @@ function newAnalysisWorker(){
     document.getElementById('report').textContent=`Analysis, ${side} to move${d.done?"":" (thinking…)"}: depth ${d.depth}, ${d.nodes.toLocaleString()} nodes in ${(d.ms/1000).toFixed(2)} s (${(d.nps/1000).toFixed(0)} knps)\nscore ${d.score>0?"+":""}${d.score.toFixed(1)} for ${side}\nPV: ${d.pv.map(cellName).join(" ")}`; };
   return w;
 }
-function updateAnalysis(){   // run while it is the human's turn (or setup mode) and analysis mode is on; otherwise stop
+function updateAnalysis(){   // analysis mode (user 2026-09-27): the human moves both sides and the engine analyses the position; otherwise stop
   const on=document.getElementById('analysis').checked && boardReady && phase==="play" && !over && !busy;
   analysisGen++;
   if(AW && analysisBusy){ AW.terminate(); AW=null; analysisBusy=false; }   // a deep iteration takes many seconds: drop the worker instead of waiting for it
@@ -165,7 +164,6 @@ function updateAnalysis(){   // run while it is the human's turn (or setup mode)
   analysisBusy=true;
   AW.postMessage({type:'analyse',gen:analysisGen,red:startCells[0],white:startCells[1],moves:hist.slice(),nodes:ANALYSIS_NODES});
 }
-document.getElementById('analysis').addEventListener('change', updateAnalysis);
 function gameOver(){
   over=true; const r=M._hn_score(0), w=M._hn_score(1);
   setStatus(r===w?`Game over — draw ${r}:${w}`:`Game over — ${r>w?'Red':'White'} wins ${r}:${w}${(r>w)===(myColor===1)?' — you win!':' — engine wins.'}`);
@@ -216,14 +214,15 @@ document.getElementById('takeback').addEventListener('click', ()=>{   // one mov
   setStatus("Move taken back.");
   maybeEngine();
 });
-document.getElementById('setup').addEventListener('change', ()=>{ if(phase!=="play"||over)return; if(!document.getElementById('setup').checked) myColor=3-M._hn_stm(); maybeEngine(); });
+document.getElementById('analysis').addEventListener('change', ()=>{   // leaving analysis mode hands the side to move to the engine
+  if(phase!=="play"||over){ updateAnalysis(); return; } if(!document.getElementById('analysis').checked) myColor=3-M._hn_stm(); maybeEngine(); });
 document.getElementById('move').addEventListener('click', ()=>{   // the engine takes over the side to move and keeps it
-  if(busy||phase!=="play"||over)return; document.getElementById('setup').checked=false; myColor=3-M._hn_stm(); maybeEngine();
+  if(busy||phase!=="play"||over)return; document.getElementById('analysis').checked=false; myColor=3-M._hn_stm(); maybeEngine();
 });
 function maybeEngine(){
   draw();
-  if(!over && phase==="play" && !document.getElementById('setup').checked && M._hn_stm()!==myColor) engineTurn();
-  else if(!over) setStatus(document.getElementById('setup').checked ? (M._hn_stm()===1?"Setup: red to move.":"Setup: white to move.") : `Your turn (${myColor===1?"red":"white"}).`);
+  if(!over && phase==="play" && !document.getElementById('analysis').checked && M._hn_stm()!==myColor) engineTurn();
+  else if(!over) setStatus(document.getElementById('analysis').checked ? (M._hn_stm()===1?"Red to move.":"White to move.") : `Your turn (${myColor===1?"red":"white"}).`);
   updateAnalysis();
 }
 function randStart(){   // any two distinct cells but the centre
