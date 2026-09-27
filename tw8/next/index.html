@@ -31,6 +31,7 @@
   .cell.legal { cursor:pointer; }
   .cell.legal:hover { stroke:#3a7d3a; stroke-width:2.5; }
   .stack-num { font:600 11px system-ui; text-anchor:middle; dominant-baseline:central; pointer-events:none; }
+  .rrow { height:1.45em; line-height:1.45em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }   /* the report keeps its four rows */
   .coord { font:600 10px system-ui; fill:#8a7f6d; text-anchor:middle; dominant-baseline:central; pointer-events:none; }
   .hintnum { font:600 11px system-ui; text-anchor:middle; dominant-baseline:central; fill:#4e7d4e; pointer-events:none; }
   #status { font-weight:600; min-height:1.4em; }
@@ -60,11 +61,12 @@
     <div class="box">
       <div id="status">Loading engine…</div>
       <div id="thinking"></div>
-      <div id="report" class="small" style="margin-top:6px;font-family:ui-monospace,monospace;white-space:pre-wrap"></div>
+      <div id="report" class="small" style="margin-top:6px;font-family:ui-monospace,monospace">
+        <div class="rrow" id="r_head"></div><div class="rrow" id="r_score"></div><div class="rrow" id="r_pv"></div><div class="rrow" id="r_foot"></div>
+      </div>
       <div style="margin-top:8px">
         <div class="score"><span><svg width="14" height="14" viewBox="-7 -7 14 14" style="vertical-align:-2px;margin-right:6px"><path d="M-3,-1 v-2.5 a3,3 0 0 1 6,0 v2.5" fill="none" stroke="#333" stroke-width="1.6"></path><rect x="-4.5" y="-1" width="9" height="7" rx="1.5" fill="var(--red)" stroke="#333" stroke-width="1"></rect></svg>Red territory</span><b id="sred">–</b></div>
         <div class="score"><span><svg width="14" height="14" viewBox="-7 -7 14 14" style="vertical-align:-2px;margin-right:6px"><path d="M-3,-1 v-2.5 a3,3 0 0 1 6,0 v2.5" fill="none" stroke="#333" stroke-width="1.6"></path><rect x="-4.5" y="-1" width="9" height="7" rx="1.5" fill="var(--white)" stroke="#333" stroke-width="1"></rect></svg>White territory</span><b id="swhite">–</b></div>
-        <div class="small" style="margin-top:6px">Decided cells carry the padlock of their owner; empty decided cells are tinted.</div>
       </div>
     </div>
     <div class="box small">
@@ -72,7 +74,7 @@
     </div>
   </div>
 </div>
-<script src="../hn8.js?v=ab015-962c6d9a"></script>
+<script src="../hn8.js?v=ab015-d9d142f3"></script>
 <script>
 "use strict";
 const SELFTEST_RED=79, SELFTEST_WHITE=176, SELFTEST_MOVE=85, SELFTEST_NODES=6144, SELFTEST_SCORE=2762.500000;   // set by tw8/tools/build_web8.sh from the native build
@@ -139,30 +141,44 @@ function draw(){
   }
 }
 function setStatus(t){ document.getElementById('status').textContent=t; }
-function pvText(){ const L=M._hn_pv_len(); const a=[]; for(let k=0;k<L;k++)a.push(cellName(M._hn_pv(k))); return a.join(" "); }
-function showReport(){   // the search that produced the engine's last move (score from the engine's side)
-  const d=M._hn_last(0), n=M._hn_last(1), t=M._hn_last(2), sc=M._hn_last(3)/100, nps=M._hn_last(4);
-  document.getElementById('report').textContent=`depth ${d}, ${n.toLocaleString()} nodes in ${(t/1000).toFixed(2)} s (${(nps/1000).toFixed(0)} knps)\nscore ${sc>0?"+":""}${sc.toFixed(1)}\nPV: ${pvText()}`;
-}
-let AW=null, analysisGen=0, analysisBusy=false, analysisBest=-1;   // analysisBest: the best move of the running analysis of the position on the board (-1: none yet)   // analysis worker (a second engine instance); the newest position wins
-function newAnalysisWorker(){
-  const w=new Worker('analysis-worker.js?v=ab015-962c6d9a');
-  w.onmessage=ev=>{ const d=ev.data; if(d.type!=='report'||d.gen!==analysisGen) return;
-    if(d.done) analysisBusy=false;
-    if(d.depth>=1 && d.pv.length) analysisBest=d.pv[0];
-    if(d.nomove){ document.getElementById('report').textContent="Analysis: no legal move."; return; }
-    const side=d.stm===1?"red":"white";
-    document.getElementById('report').textContent=`Analysis, ${side} to move${d.done?"":" (thinking…)"}: depth ${d.depth}, ${d.nodes.toLocaleString()} nodes in ${(d.ms/1000).toFixed(2)} s (${(d.nps/1000).toFixed(0)} knps)\nscore ${d.score>0?"+":""}${d.score.toFixed(1)} for ${side}\nPV: ${d.pv.map(cellName).join(" ")}`; };
+// Every search runs in the search worker: the engine's own move (play) and the analysis. The report has four fixed rows:
+// the depth and the root move being searched, the score, the PV (both change with every new best move), and at the end
+// of the search the nodes, the time and the speed.
+let SW=null, searchGen=0, searchBusy=false, searchPlay=false, searchSide="", analysisBest=-1;   // analysisBest: best move so far of the analysis of the position on the board
+function report(row,text){ document.getElementById('r_'+row).textContent=text; }
+const signed=x=>(x>0?"+":"")+x.toFixed(1);
+function newSearchWorker(){
+  const w=new Worker('search-worker.js?v=ab015-d9d142f3');
+  w.onmessage=ev=>{ const d=ev.data; if(d.gen!==searchGen) return;
+    if(d.type==='move'){ report('head',`depth ${d.depth}: ${d.index}/${d.count} ${cellName(d.move)}`); return; }
+    if(d.type==='best'||d.type==='done'){
+      if(d.pv.length){ report('score',`score ${signed(d.score)} for ${searchSide}`); report('pv',`PV ${d.pv.map(cellName).join(" ")}`); if(!searchPlay) analysisBest=d.pv[0]; }
+    }
+    if(d.type==='done'){
+      searchBusy=false;
+      report('head', d.best<0 ? "no legal move" : `depth ${d.depth}`);
+      report('foot', d.best<0 ? "" : `${d.nodes.toLocaleString()} nodes in ${(d.ms/1000).toFixed(2)} s (${(d.nps/1000).toFixed(0)} knps)`);
+      if(searchPlay) engineFinish(d.best);
+    } };
   return w;
 }
-function updateAnalysis(){   // analysis mode (user 2026-09-27): the human moves both sides and the engine analyses the position; otherwise stop
-  const on=document.getElementById('analysis').checked && boardReady && phase==="play" && !over && !busy;
-  analysisGen++; analysisBest=-1;
-  if(AW && analysisBusy){ AW.terminate(); AW=null; analysisBusy=false; }   // a deep iteration takes many seconds: drop the worker instead of waiting for it
-  if(!on) return;
-  if(!AW) AW=newAnalysisWorker();
-  analysisBusy=true;
-  AW.postMessage({type:'analyse',gen:analysisGen,red:startCells[0],white:startCells[1],moves:hist.slice(),nodes:+document.getElementById('tmove').value});   // the selected nodes per move (user 2026-09-27)
+function stopSearch(){   // a running search is dropped with its worker: a deep iteration takes many seconds
+  searchGen++; analysisBest=-1;
+  if(SW && searchBusy){ SW.terminate(); SW=null; }
+  searchBusy=false;
+}
+function startSearch(play){
+  stopSearch();
+  if(!SW) SW=newSearchWorker();
+  searchBusy=true; searchPlay=play; searchSide=M._hn_stm()===1?"red":"white";
+  for(const row of ['head','score','pv','foot']) report(row,"");
+  SW.postMessage({type:'search',gen:searchGen,red:startCells[0],white:startCells[1],moves:hist.slice(),nodes:+document.getElementById('tmove').value});
+}
+function cancelThinking(){ if(busy){ stopSearch(); busy=false; document.getElementById('thinking').textContent=""; } }   // the engine's own search is abandoned
+function updateAnalysis(){   // analysis mode: the human moves both sides and the engine analyses the position on the board
+  if(busy) return;   // the engine is thinking about its own move
+  const on=document.getElementById('analysis').checked && boardReady && phase==="play" && !over;
+  if(on) startSearch(false); else stopSearch();
 }
 function gameOver(){
   over=true; const r=M._hn_score(0), w=M._hn_score(1);
@@ -180,21 +196,16 @@ function afterMove(){
   }
   maybeEngine();
 }
-function engineFinish(mv){
+let statusNote="";   // what the engine just did, shown once in front of "Your turn"
+function engineFinish(mv){   // the worker found the engine's move: play it on the page's board
   busy=false; document.getElementById('thinking').textContent="";
-  if(mv>=0){ lastMove=mv; hist.push(mv); setStatus(`Engine played ${cellName(mv)}. Your turn (${myColor===1?"red":"white"}).`); showReport(); }
-  else { M._hn_pass(); hist.push(-1); setStatus("Engine passed. Your turn."); }
+  if(mv>=0 && M._hn_play(mv)>0){ lastMove=mv; hist.push(mv); statusNote=`Engine played ${cellName(mv)}. `; }
+  else { M._hn_pass(); hist.push(-1); statusNote="Engine passed. "; }
   afterMove();
 }
 function engineTurn(){
-  busy=true; setStatus("Engine thinking…"); document.getElementById('thinking').textContent="⏳"; updateAnalysis();
-  setTimeout(()=>{   // one deepening iteration per timeslice, so the report updates after every depth
-    const nodes=+document.getElementById('tmove').value;
-    if(!M._hn_think_begin(nodes)){ engineFinish(M._hn_think_end()); return; }
-    showReport();
-    const step=()=>{ if(M._hn_think_step()){ showReport(); setTimeout(step,0); } else engineFinish(M._hn_think_end()); };
-    setTimeout(step,0);
-  }, 30);
+  busy=true; setStatus("Engine thinking…"); document.getElementById('thinking').textContent="⏳";
+  startSearch(true);
 }
 svg.addEventListener('click', ev=>{
   const t=ev.target.closest('.legal'); if(!t||busy)return;
@@ -206,7 +217,8 @@ svg.addEventListener('click', ev=>{
   if(M._hn_play(i)>0){ lastMove=i; hist.push(i); afterMove(); }
 });
 document.getElementById('takeback').addEventListener('click', ()=>{   // one move back, whoever made it; the human then owns the side to move
-  if(busy||phase!=="play"||!startCells||hist.length===0)return;
+  if(phase!=="play"||!startCells||hist.length===0)return;
+  cancelThinking();
   hist.pop(); while(hist.length&&hist[hist.length-1]<0) hist.pop();   // a forced pass goes back with the move before it
   M._hn_init(startCells[0], startCells[1]); over=false; lastMove=-1;
   for(const h of hist){ if(h>=0){ M._hn_play(h); lastMove=h; } else M._hn_pass(); }
@@ -216,6 +228,7 @@ document.getElementById('takeback').addEventListener('click', ()=>{   // one mov
 });
 document.getElementById('tmove').addEventListener('change', ()=>{ if(document.getElementById('analysis').checked) updateAnalysis(); });   // a new budget restarts the analysis
 document.getElementById('analysis').addEventListener('change', ()=>{   // leaving analysis mode hands the side to move to the engine
+  cancelThinking();
   if(phase!=="play"||over){ updateAnalysis(); return; } if(!document.getElementById('analysis').checked) myColor=3-M._hn_stm(); maybeEngine(); });
 document.getElementById('move').addEventListener('click', ()=>{
   if(busy||phase!=="play"||over)return;
@@ -230,7 +243,8 @@ document.getElementById('move').addEventListener('click', ()=>{
 function maybeEngine(){
   draw();
   if(!over && phase==="play" && !document.getElementById('analysis').checked && M._hn_stm()!==myColor) engineTurn();
-  else if(!over) setStatus(document.getElementById('analysis').checked ? (M._hn_stm()===1?"Red to move.":"White to move.") : `Your turn (${myColor===1?"red":"white"}).`);
+  else if(!over) setStatus(document.getElementById('analysis').checked ? (M._hn_stm()===1?"Red to move.":"White to move.") : `${statusNote}Your turn (${myColor===1?"red":"white"}).`);
+  statusNote="";
   updateAnalysis();
 }
 function randStart(){   // any two distinct cells but the centre
@@ -238,6 +252,7 @@ function randStart(){   // any two distinct cells but the centre
   const a=pick(); let b; do b=pick(); while(b===a); return [a,b];
 }
 function newGame(){
+  cancelThinking(); stopSearch();
   myColor=1;   // the human starts as red; Move! hands the side to move to the engine
   if(document.getElementById('startmode').value==="c"){
     boardReady=false; over=true; phase="placeRed"; startRed=-1; lastMove=-1;
