@@ -74,7 +74,7 @@
     </div>
   </div>
 </div>
-<script src="../hn8.js?v=ab015-d9d142f3"></script>
+<script src="../hn8.js?v=ab015-1925e751"></script>
 <script>
 "use strict";
 const SELFTEST_RED=79, SELFTEST_WHITE=176, SELFTEST_MOVE=85, SELFTEST_NODES=6144, SELFTEST_SCORE=2762.500000;   // set by tw8/tools/build_web8.sh from the native build
@@ -148,7 +148,7 @@ let SW=null, searchGen=0, searchBusy=false, searchPlay=false, searchSide="", ana
 function report(row,text){ document.getElementById('r_'+row).textContent=text; }
 const signed=x=>(x>0?"+":"")+x.toFixed(1);
 function newSearchWorker(){
-  const w=new Worker('search-worker.js?v=ab015-d9d142f3');
+  const w=new Worker('search-worker.js?v=ab015-1925e751');
   w.onmessage=ev=>{ const d=ev.data; if(d.gen!==searchGen) return;
     if(d.type==='move'){ report('head',`depth ${d.depth}: ${d.index}/${d.count} ${cellName(d.move)}`); return; }
     if(d.type==='best'||d.type==='done'){
