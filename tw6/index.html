@@ -42,7 +42,7 @@
 </head>
 <body>
 <h1>HighNoon 6</h1>
-<div class="sub">Tumbleweed on the size-6 board (91 cells), CodeCup rules — HighNoon <span id="netname">ab003</span></div>
+<div class="sub">Tumbleweed on the size-6 board (91 cells) — HighNoon <span id="netname">ab003</span></div>
 <div id="wrap">
   <svg id="board" width="560" height="520" viewBox="0 0 560 520"></svg>
   <div class="panel">
@@ -70,7 +70,7 @@
       </div>
     </div>
     <div class="box small">
-      <b>Rules.</b> Size-6 board, CodeCup rules; the two starting stacks may go anywhere. Place a stack on any hex seen by your stacks along straight lines. Its height = number of your stacks that see it; you need at least as many as the opponent sees there, and more than the current stack's height. Replacing works on enemy, neutral, and your own stacks. When territory is settled, the player with more territory wins. Badges show legal moves, including captures and reinforcements on occupied cells.
+      <b>Rules.</b> The board starts with a neutral stack of height 2 in the centre and one stack of height 1 for each player. Red moves first, then the players take turns. A move places a stack on a cell that at least one of your stacks can see along a straight line with nothing in between. Its height is the number of your stacks that see the cell. The move is legal if that number is higher than the stack already on the cell, and at least as high as the number of opponent stacks that see the cell. You may replace any stack this way: the opponent's, the neutral one or your own. A player with no legal move passes. The game ends when every cell is decided, and the player with more cells wins. A padlock marks a cell that is already decided.<br><br>Two differences from standard Tumbleweed: there is no swap after the setup, and a move must see at least as many of your stacks as of the opponent's.
     </div>
   </div>
 </div>
@@ -184,7 +184,7 @@ function updateAnalysis(){   // analysis mode: the human moves both sides and th
 function gameOver(){
   over=true; const r=M._hn_score(0), w=M._hn_score(1);
   setStatus(r===w?`Game over — draw ${r}:${w}`:`Game over — ${r>w?'Red':'White'} wins ${r}:${w}${(r>w)===(myColor===1)?' — you win!':' — engine wins.'}`);
-  draw();   // redraw without move badges
+  draw();
   updateAnalysis();
 }
 function afterMove(){
