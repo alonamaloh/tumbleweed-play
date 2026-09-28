@@ -49,7 +49,7 @@
     <div class="box">
       <div style="margin-bottom:8px">
         <button id="newgame">New game</button>
-        <select id="startmode" style="margin-left:8px"><option value="r">Random</option><option value="c">Choose cells</option></select>
+        <select id="startmode" style="margin-left:8px"><option value="b" selected>Balanced</option><option value="r">Random</option><option value="c">Choose cells</option></select>
       </div>
       <div style="margin-bottom:8px"><label><input type="checkbox" id="analysis"> Analysis mode</label></div>
       <div style="margin-bottom:8px">Nodes per move:
@@ -248,6 +248,19 @@ function maybeEngine(){
   statusNote="";
   updateAnalysis();
 }
+const BALANCED=["A1 H5","A1 D3","A1 J8","A1 B2","A1 D2","A1 E5","A1 J7","A1 H7","B2 E4","A1 H8","B1 C2","A1 D4","A1 E2","A1 G7","A1 H4","A1 I8","A1 C2","A1 C3","A1 G6","A1 H6","A1 I7","A1 J9","A1 K7","B1 H7","B2 H7","A1 G2","A1 G3","A1 G4"];   // 28 offerings within 1 cells of even (tw8/tools/balanced_starts.py)
+const parseName=t=> idx(t.charCodeAt(0)-65, (+t.slice(1))-1);
+function symmetric(i,k){   // cell i under symmetry k of the board: 6 rotations, and the same after a mirror (k >= 6)
+  let a=(i%N)-M0, c=-(Math.floor(i/N)-M0), b=-a-c;
+  if(k>=6){ const t=a; a=b; b=t; }
+  for(let j=0;j<k%6;j++){ const t=a; a=-c; c=-b; b=-t; }
+  return idx(a+M0, -c+M0);
+}
+function balancedStart(){   // a start that the engine judges even (searched offerings), turned or mirrored at random
+  if(!BALANCED.length) return randStart();
+  const [r,w]=BALANCED[Math.floor(Math.random()*BALANCED.length)].split(" ").map(parseName), k=Math.floor(Math.random()*12);
+  return [symmetric(r,k), symmetric(w,k)];
+}
 function randStart(){   // any two distinct cells but the centre
   const pick=()=>{ for(;;){ const [c,r]=cells[Math.floor(Math.random()*cells.length)]; const i=idx(c,r); if(i!==CENTRE)return i; } };
   const a=pick(); let b; do b=pick(); while(b===a); return [a,b];
@@ -259,7 +272,7 @@ function newGame(){
     boardReady=false; over=true; phase="placeRed"; startRed=-1; lastMove=-1;
     setStatus("Click RED's starting cell."); draw(); return;
   }
-  const [rc,wc]=randStart(); M._hn_init(rc,wc); boardReady=true; startCells=[rc,wc]; hist=[]; over=false; phase="play"; lastMove=-1;
+  const [rc,wc]=document.getElementById('startmode').value==="b" ? balancedStart() : randStart(); M._hn_init(rc,wc); boardReady=true; startCells=[rc,wc]; hist=[]; over=false; phase="play"; lastMove=-1;
   maybeEngine();
 }
 document.getElementById('newgame').addEventListener('click', newGame);
