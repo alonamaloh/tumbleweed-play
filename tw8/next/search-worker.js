@@ -6,7 +6,8 @@
 importScripts('../hn8.js'+self.location.search);
 let M=null, job=null, queued=null, cur=null;
 const pv=()=>{ const a=[]; for(let k=0;k<M._hn_pv_len();k++) a.push(M._hn_pv(k)); return a; };
-self.hnRootMove=(depth,index,count,move)=>self.postMessage({type:'move',gen:job.gen,depth,index,count,move});
+const edge=x=>Math.abs(x)>=(1<<20)?(x<0?-Infinity:Infinity):x/256;   // an aspiration window edge in cells
+self.hnRootMove=(depth,index,count,move,lo,hi)=>self.postMessage({type:'move',gen:job.gen,depth,index,count,move,lo:edge(lo),hi:edge(hi)});
 let lastBest=null;   // the last best-move report of the running search: depth and what its score is (0 exact, 1 at least, 2 at most)
 self.hnRootBest=(depth,move,bound)=>{ lastBest={depth,bound}; self.postMessage({type:'best',gen:job.gen,depth,bound,score:M._hn_last(3)/100,pv:pv()}); };
 function setPosition(j){

@@ -74,7 +74,7 @@
     </div>
   </div>
 </div>
-<script src="../hn8.js?v=ab015-21665d41"></script>
+<script src="../hn8.js?v=ab015-8dca47e7"></script>
 <script>
 "use strict";
 const SELFTEST_RED=79, SELFTEST_WHITE=176, SELFTEST_MOVE=85, SELFTEST_NODES=6144, SELFTEST_SCORE=1628.906250;   // set by tw8/tools/build_web8.sh from the native build
@@ -147,10 +147,11 @@ function setStatus(t){ document.getElementById('status').textContent=t; }
 let SW=null, searchGen=0, searchBusy=false, searchPlay=false, searchSide="", analysisBest=-1;   // analysisBest: best move so far of the analysis of the position on the board
 function report(row,text){ document.getElementById('r_'+row).textContent=text; }
 const signed=x=>(x>0?"+":"")+x.toFixed(1);
+const edgeText=x=> x===undefined ? "?" : !isFinite(x) ? (x<0?"-∞":"+∞") : (x>0?"+":"")+x.toFixed(2);
 function newSearchWorker(){
-  const w=new Worker('search-worker.js?v=ab015-21665d41');
+  const w=new Worker('search-worker.js?v=ab015-8dca47e7');
   w.onmessage=ev=>{ const d=ev.data; if(d.gen!==searchGen) return;
-    if(d.type==='move'){ report('head',`depth ${d.depth}: ${d.index}/${d.count} ${cellName(d.move)}`); return; }
+    if(d.type==='move'){ report('head',`depth ${d.depth}: ${d.index}/${d.count} ${cellName(d.move)} (${edgeText(d.lo)}, ${edgeText(d.hi)})`); return; }   // with the aspiration window of this pass, in cells
     if(d.type==='best'||d.type==='done'){
       if(d.pv.length){ report('score',`score ${['','≥ ','≤ '][d.bound||0]}${signed(d.score)} for ${searchSide}`); report('pv',`PV ${d.pv.map(cellName).join(" ")}`); if(!searchPlay) analysisBest=d.pv[0]; }
     }
