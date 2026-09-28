@@ -1,9 +1,9 @@
-// Search worker of the experimental tw8 page (2026-09-27). Every search of the page runs here, the engine's own move
+// Search worker of the tw8 page (2026-09-27). Every search of the page runs here, the engine's own move
 // and the analysis alike, so the page never blocks. The engine calls hnRootMove before each root move and hnRootBest
 // on each new best move, and the worker passes them on; nodes, time and speed come once, with the final message.
 // Nothing is played here: the page plays the move it is told. The board follows the page's move list, so the
 // transposition table survives from move to move as long as the game just continues.
-importScripts('../hn8.js'+self.location.search);
+importScripts('hn8.js'+self.location.search);
 let M=null, job=null, queued=null, cur=null;
 const pv=()=>{ const a=[]; for(let k=0;k<M._hn_pv_len();k++) a.push(M._hn_pv(k)); return a; };
 const edge=x=>Math.abs(x)>=(1<<20)?(x<0?-Infinity:Infinity):x/256;   // an aspiration window edge in cells
