@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HighNoon — Lab 6</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div><h1>HighNoon analysis</h1><p>Size <span id="board-size">6</span> · MCTS · <span id="model-name">mOV48</span></p></div>
+    <span class="lab-tag">Lab 6</span>
+  </header>
+  <main>
+    <section class="board-panel" aria-label="Game board">
+      <div class="board-tools">
+        <div id="turn-indicator" class="turn-indicator" role="status" aria-live="polite"><span id="turn-stone" class="turn-stone red" aria-hidden="true" hidden></span><span id="turn-text">Loading…</span></div>
+        <div class="view-modes" role="group" aria-label="Board display"><button data-view="normal" class="selected" aria-pressed="true">Normal</button><button data-view="ownership" aria-pressed="false">Ownership</button><button data-view="visits" aria-pressed="false">Visits</button><button data-view="margin" aria-pressed="false">Margin</button></div>
+      </div>
+      <div class="board-surface">
+        <div id="preview-context" class="preview-context" role="status" aria-live="polite" hidden></div>
+        <svg id="board" viewBox="0 0 600 560" aria-label="Tumbleweed board"></svg>
+      </div>
+      <div id="ownership-legend-row" class="legend"><span class="white-swatch"></span> White <span id="ownership-legend" class="gradient" role="img" aria-label="Expected ownership balance"><span id="ownership-marker-value" aria-hidden="true"></span><span id="ownership-marker" aria-hidden="true"></span></span> Red <span class="red-swatch"></span></div>
+      <div id="margin-loss-legend" class="legend" hidden><span class="improvement-swatch"></span> Better <span class="loss-unit">Margin loss (cells)</span><span class="margin-loss-scale"><span class="margin-loss-gradient"></span><span class="margin-loss-ticks"><span>0</span><span>−5</span><span>≤−10</span></span></span></div>
+      <p id="map-caption" class="visually-hidden" aria-live="polite"></p>
+      <div class="review">
+        <button id="back" aria-label="Previous move">←</button>
+        <input id="review" type="range" min="0" max="0" value="0" aria-label="Move to review">
+        <button id="forward" aria-label="Next move">→</button>
+        <span id="move-number">Start</span>
+      </div>
+    </section>
+    <aside>
+      <div class="game-controls">
+        <button id="newgame" disabled>New game</button>
+        <select id="startmode" aria-label="Starting position"><option value="b">Balanced</option><option value="r">Random</option><option value="c" selected>Choose cells</option></select>
+      </div>
+      <p id="analysis-error" class="small error" role="alert"></p>
+      <section class="card candidates">
+        <div class="table-wrap"><table aria-label="Candidate moves"><thead><tr><th>Move</th><th>Visits</th><th>Effort</th><th>Margin</th></tr></thead><tbody id="candidates"></tbody></table></div>
+        <p id="candidate-pv" class="small" hidden></p>
+      </section>
+      <section class="card position">
+        <textarea id="moves" rows="3" spellcheck="false" aria-label="Move list" placeholder="A1 H5 …"></textarea>
+        <div class="controls"><button id="load" disabled>Load</button><button id="copy" disabled>Copy</button></div>
+        <p id="position-error" class="error" role="alert"></p>
+      </section>
+    </aside>
+  </main>
+  <script src="config.js"></script>
+  <script src="hn.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
