@@ -152,7 +152,8 @@ function marginLossColor(loss) {
 }
 
 function previewMove() {
-  if (boardGesture) return boardGesture.cancelled ? null : boardGesture.cell;
+  if (boardGesture) return boardGesture.pointerType === "mouse"
+    ? boardGesture.cancelled ? null : boardGesture.cell : boardGesture.previewCell;
   if (rowGesture) return rowGesture.cancelled ? null : rowGesture.move;
   return hoverMove;
 }
@@ -533,7 +534,8 @@ board.addEventListener("pointerdown", event => {
   event.preventDefault();
   hoverMove = null; hoverRow = null;
   suppressClickUntil = 0;
-  boardGesture = {pointerId: event.pointerId, cell: +hex.dataset.cell, cancelled: false,
+  boardGesture = {pointerId: event.pointerId, pointerType: event.pointerType,
+    cell: +hex.dataset.cell, previewCell: +hex.dataset.cell, cancelled: false,
     preview: !setupPhase && (event.pointerType !== "mouse" || view !== "normal"), key: positionKey()};
   board.setPointerCapture(event.pointerId);
   drawBoard(true);
@@ -543,12 +545,29 @@ board.addEventListener("pointermove", event => {
   if (event.pointerType === "mouse" && !boardGesture) { previewBoardHover(event); return; }
   if (!boardGesture || event.pointerId !== boardGesture.pointerId) return;
   event.preventDefault();
-  // Cancellation stays latched even if the finger returns to the first cell.
-  if (!boardGesture.cancelled && gestureCellAt(event) !== boardGesture.cell) {
+  const cell = gestureCellAt(event);
+  let changed = false;
+  // Leaving the first cell permanently cancels playing, but touch/pen can
+  // continue browsing read-only previews anywhere on the board.
+  if (!boardGesture.cancelled && cell !== boardGesture.cell) {
     boardGesture.cancelled = true;
-    drawBoard(true);
+    changed = true;
   }
+  if (boardGesture.pointerType !== "mouse") {
+    const legal = valid(cell) && (setupPhase ? legalStartCell(cell)
+      : !engine._hn_score(2) && engine._hn_value(cell) > 0);
+    const next = legal ? cell : null;
+    if (next !== boardGesture.previewCell) changed = true;
+    boardGesture.previewCell = next;
+  }
+  if (changed) drawBoard(true);
 });
+
+// Safari may also deliver native touch events during a pointer gesture.
+// Suppress panning only while inspecting the board, not elsewhere on the page.
+document.addEventListener("touchmove", event => {
+  if (event.cancelable && boardGesture && boardGesture.pointerType !== "mouse") event.preventDefault();
+}, {passive: false, capture: true});
 
 function finishBoardGesture(event, cancelled) {
   if (!boardGesture || event.pointerId !== boardGesture.pointerId) return;

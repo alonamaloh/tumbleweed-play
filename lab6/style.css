@@ -13,7 +13,7 @@ main { max-width: 1220px; margin: auto; display: grid; grid-template-columns: mi
 .turn-stone { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 1px solid #777c70; background: #fff; }
 .turn-stone.red { background: var(--red); border-color: #923128; }
 .turn-stone[hidden] { display: none; }
-.board-surface { position: relative; padding-top: 6px; }
+.board-surface { position: relative; padding-top: 6px; touch-action: none; }
 .preview-context { position: absolute; top: 0; left: 0; right: 0; min-height: 20px; font-size: 12px; font-weight: 600; color: var(--muted); pointer-events: none; }
 .preview-context[hidden] { display: none; }
 #board { width: 100%; max-height: 68vh; display: block; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
