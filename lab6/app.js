@@ -20,6 +20,8 @@ let summaryCacheBytes = 0;
 const marginHistory = new Map();
 const MARGIN_HISTORY_LIMIT = 2048;
 const MARGIN_GRAPH = Object.freeze({width: 600, left: 48, right: 584, top: 14, bottom: 150});
+const MARGIN_GRAPH_MIN = 5;
+let marginGraphLimit = MARGIN_GRAPH_MIN;
 
 let engine = null;
 let worker = null;
@@ -67,6 +69,7 @@ function reportMargin(data) {
 
 function rememberTimelineMargin(key, margin) {
   if (!key || !Number.isFinite(margin)) return;
+  marginGraphLimit = Math.max(marginGraphLimit, Math.abs(margin));
   marginHistory.delete(key);
   marginHistory.set(key, margin);
   while (marginHistory.size > MARGIN_HISTORY_LIMIT)
@@ -98,13 +101,9 @@ function marginGraphX(index) {
 }
 
 function marginGraphScale(margins) {
-  const largest = margins.reduce((maximum, margin) =>
-    Number.isFinite(margin) ? Math.max(maximum, Math.abs(margin)) : maximum, 1);
-  const target = largest / 2;
-  const power = 10 ** Math.floor(Math.log10(target));
-  const unit = [1, 2, 5, 10].find(value => value * power >= target);
-  const step = unit * power;
-  return {step, limit: Math.ceil(largest / step) * step};
+  marginGraphLimit = margins.reduce((maximum, margin) =>
+    Number.isFinite(margin) ? Math.max(maximum, Math.abs(margin)) : maximum, marginGraphLimit);
+  return {step: marginGraphLimit / 2, limit: marginGraphLimit};
 }
 
 function drawMarginTimeline() {
@@ -126,10 +125,12 @@ function drawMarginTimeline() {
   timeline.setAttribute("data-range", limit);
   let svg = `<rect class="margin-red-region" x="${left}" y="${top}" width="${right - left}" height="${zero - top}"/>`;
   svg += `<rect class="margin-white-region" x="${left}" y="${zero}" width="${right - left}" height="${bottom - zero}"/>`;
-  for (let tick = -limit; tick <= limit + step / 2; tick += step) {
+  for (let index = -2; index <= 2; index++) {
+    const tick = index * step;
     const y = yAt(tick).toFixed(3);
+    const label = tick.toFixed(1).replace(/\.0$/, "");
     svg += `<path class="${tick === 0 ? "margin-zero" : "margin-grid"}" d="M${left},${y}H${right}"/>`;
-    svg += `<text class="margin-axis-label" x="${left - 9}" y="${y}" text-anchor="end" dominant-baseline="middle">${tick > 0 ? "+" : ""}${tick}</text>`;
+    svg += `<text class="margin-axis-label" x="${left - 9}" y="${y}" text-anchor="end" dominant-baseline="middle">${tick > 0 ? "+" : ""}${label}</text>`;
   }
   const tickCount = Math.min(count, 5);
   for (let tick = 0; tick < tickCount; tick++) {
@@ -548,6 +549,7 @@ function newGame() {
   if (!engine) return;
   cancelTimelineGesture();
   marginHistory.clear();
+  marginGraphLimit = MARGIN_GRAPH_MIN;
   cancelSearch();
   history = []; cursor = 0;
   setupRed = null;
@@ -605,6 +607,7 @@ function loadPosition() {
     setupPhase = 0; setupRed = null;
     cancelTimelineGesture();
     marginHistory.clear();
+    marginGraphLimit = MARGIN_GRAPH_MIN;
     starts = [red, white]; history = moves; cursor = moves.length;
     refreshPosition();
   } catch (error) { $("position-error").textContent = error.message; }
