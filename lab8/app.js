@@ -361,6 +361,8 @@ function drawBoard(force = false) {
   const ghostMove = ghostLegal ? selectedMove : null;
   const ownershipPreview = preview && view === "ownership";
   const replyPreview = preview && (view === "visits" || view === "margin");
+  // The dashed hint is the root-list Space action, not an opponent's reply.
+  const highlightedMove = !placing && !replyPreview ? firstListedMove() : null;
   const map = placing ? null : ownershipPreview ? preview.ownership : result && result.ownership;
   const ownershipOn = !placing && (!!ownershipPreview || view === "ownership");
   const marginOn = !placing && view === "margin" && !ownershipPreview;
@@ -430,7 +432,7 @@ function drawBoard(force = false) {
     if (territory === 1 || territory === 2) svg += `<g class="territory-lock" data-lock-cell="${cell}" pointer-events="none" transform="translate(${x - radius * .52},${y + radius * .28})"><path d="M-2,-1v-2a2,2 0 0 1 4,0v2" fill="none" stroke="#575e53" stroke-width="1.3"/><rect x="-3" y="-1" width="6" height="5" rx="1" fill="${territory === 1 ? "#ba4238" : "#fffefa"}" stroke="#575e53" stroke-width=".9"/></g>`;
     if (cursor && cell === history[cursor - 1]) svg += `<path d="${hexPath(x, y)}" fill="none" stroke="#bb853d" stroke-width="3" pointer-events="none"/>`;
     if (ghost) svg += `<path d="${hexPath(x, y)}" fill="none" stroke="#00e676" stroke-width="4" pointer-events="none"/>`;
-    else if (!placing && result && cell === displayedBest) svg += `<path d="${hexPath(x, y)}" fill="none" stroke="#00e676" stroke-width="3" stroke-dasharray="4,3" pointer-events="none"/>`;
+    else if (cell === highlightedMove) svg += `<path class="candidate-recommendation" data-recommended-move="${cell}" d="${hexPath(x, y)}" fill="none" stroke="#00e676" stroke-width="3" stroke-dasharray="4,3" pointer-events="none"/>`;
     if (Number.isFinite(moveMargin)) svg += `<text class="margin-loss-number" x="${x}" y="${y + radius * .74}" text-anchor="middle" font-size="9" font-weight="650" fill="#172b1d" pointer-events="none">${signed(moveMargin)}</text>`;
   }
   if (view === "visits" && !ownershipPreview && total) {
@@ -501,6 +503,13 @@ if (candidateMotion && typeof candidateMotion.addEventListener === "function")
     // A pressed target must not jump, even if the preference changes mid-press.
     if (candidateMotion.matches && !movePressActive()) cancelCandidateRowAnimations();
   });
+
+function firstListedMove() {
+  if (!engine || setupPhase || engine._hn_score(2) || !result) return null;
+  const move = renderedCandidateMoves[0];
+  return valid(move) && result.candidates.some(candidate => candidate.move === move && candidate.visits > 0) &&
+    engine._hn_value(move) > 0 ? move : null;
+}
 
 function sortedCandidates(data) {
   return data.candidates.filter(candidate => candidate.visits > 0).slice().sort((a, b) => {
@@ -1192,8 +1201,8 @@ document.addEventListener("keydown", event => {
     if (control && typeof control.blur === "function") control.blur();
     if (event.repeat || !engine || setupPhase || engine._hn_score(2) || !result) return;
     // Read the displayed rank, not a newer report's order during a held press.
-    const move = renderedCandidateMoves[0];
-    if (!valid(move) || !result.candidates.some(candidate => candidate.move === move && candidate.visits > 0)) return;
+    const move = firstListedMove();
+    if (move === null) return;
     cancelTimelineGesture();
     playMove(move);
   }
