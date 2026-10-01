@@ -909,10 +909,10 @@ $("candidates").addEventListener("click", event => {
   if (result && result.candidates.some(candidate => candidate.move === move)) playMove(move);
 });
 $("candidates").addEventListener("keydown", event => {
-  if (event.key === "Enter" || event.key === " ") {
+  if (event.key === "Enter" && !ignoreGameShortcut(event)) {
     event.preventDefault();
     const row = event.target.closest("tr[data-move]");
-    if (row && result && result.candidates.some(candidate => candidate.move === +row.dataset.move)) playMove(+row.dataset.move);
+    if (!event.repeat && row && result && result.candidates.some(candidate => candidate.move === +row.dataset.move)) playMove(+row.dataset.move);
   }
 });
 document.querySelectorAll("[data-view]").forEach(button => button.addEventListener("click", () => {
@@ -992,15 +992,43 @@ $("review").addEventListener("click", event => {
   reviewAt(reviewIndexAt(event));
 });
 $("review").addEventListener("keydown", event => {
+  if (ignoreGameShortcut(event)) return;
   const targets = {ArrowLeft: cursor - 1, ArrowDown: cursor - 1,
     ArrowRight: cursor + 1, ArrowUp: cursor + 1, Home: 0, End: history.length};
   if (!(event.key in targets)) return;
   event.preventDefault();
-  timelineHoverIndex = null;
+  cancelTimelineGesture();
   reviewAt(targets[event.key]);
   updateTimelineLabel();
 });
 $("review").addEventListener("contextmenu", event => event.preventDefault());
+
+function ignoreGameShortcut(event) {
+  if (event.defaultPrevented || event.isComposing || event.keyCode === 229 ||
+      event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return true;
+  const target = event.target;
+  return !!(target && (target.isContentEditable || target.closest &&
+    target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')));
+}
+
+document.addEventListener("keydown", event => {
+  if (ignoreGameShortcut(event)) return;
+  if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+    event.preventDefault();
+    cancelTimelineGesture();
+    reviewAt(cursor + (event.key === "ArrowLeft" ? -1 : 1));
+    updateTimelineLabel();
+  } else if (event.key === " ") {
+    // Space is a game command even with a mode button or candidate focused.
+    // Consume repeats and empty results without scrolling or activating it.
+    event.preventDefault();
+    if (event.repeat || !engine || setupPhase || engine._hn_score(2) || !result) return;
+    const best = result.candidates.find(candidate => candidate.move === result.best && candidate.visits > 0);
+    if (!best || !valid(best.move)) return;
+    cancelTimelineGesture();
+    playMove(best.move);
+  }
+});
 
 HN().then(module => {
   engine = module;

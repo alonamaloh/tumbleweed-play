@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HighNoon — Lab 6</title>
-  <link rel="stylesheet" href="style.css?v=20260930-10">
+  <link rel="stylesheet" href="style.css?v=20261001-11">
 </head>
 <body>
   <header>
@@ -42,9 +42,9 @@
       </section>
       <section class="card history-panel" aria-label="Game history">
         <div class="review">
-          <button id="back" aria-label="Previous move">←</button>
+          <button id="back" aria-label="Previous move" aria-keyshortcuts="ArrowLeft">←</button>
           <svg id="review" viewBox="0 0 600 180" role="slider" aria-label="Game position and expected margin" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="Start" aria-disabled="true" tabindex="-1" preserveAspectRatio="none"></svg>
-          <button id="forward" aria-label="Next move">→</button>
+          <button id="forward" aria-label="Next move" aria-keyshortcuts="ArrowRight">→</button>
           <span id="move-number">Start</span>
         </div>
       </section>
@@ -52,6 +52,6 @@
   </main>
   <script src="config.js"></script>
   <script src="hn.js"></script>
-  <script src="app.js?v=20260930-10"></script>
+  <script src="app.js?v=20261001-11"></script>
 </body>
 </html>
