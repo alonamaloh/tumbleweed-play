@@ -13,6 +13,10 @@ const signed = value => Number.isFinite(value) ? (value > 0 ? "+" : "") + value.
 const cells = Array.from({length: N * N}, (_, i) => i).filter(valid);
 const radius = SIDE === 6 ? 27 : 19.5;
 const FIXED_SEARCH_VISITS = ANALYSIS_CONFIG.searchSims || 100000;
+const CANDIDATE_ROW_SLIDE_MS = 180;
+const candidateRowAnimations = new Map();
+const candidateMotion = typeof window !== "undefined" && typeof window.matchMedia === "function"
+  ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
 const SUMMARY_CACHE_LIMIT = 512;
 const SUMMARY_CACHE_BYTE_LIMIT = 64 * 1024 * 1024;
 const summaryCache = new Map();
@@ -35,6 +39,7 @@ let result = null;
 let view = "normal";
 let hoverMove = null;
 let hoverRow = null;
+let candidateHoverPoint = null;
 let boardGesture = null;
 let rowGesture = null;
 let suppressClickUntil = 0;
@@ -477,21 +482,99 @@ function updatePreviewLine() {
   $("candidate-pv").textContent = moves.length ? `${preview ? `After ${cellName(preview.move)}: ` : ""}${moves.map(cellName).join(" ")}` : "";
 }
 
+function cancelCandidateRowAnimations() {
+  for (const [row, animation] of candidateRowAnimations) {
+    animation.cancel();
+    row.style.zIndex = "";
+    row.style.willChange = "";
+  }
+  candidateRowAnimations.clear();
+}
+
+function pauseCandidateRowAnimations() {
+  for (const animation of candidateRowAnimations.values()) animation.pause();
+}
+
+if (candidateMotion && typeof candidateMotion.addEventListener === "function")
+  candidateMotion.addEventListener("change", () => {
+    // A pressed target must not jump, even if the preference changes mid-press.
+    if (candidateMotion.matches && !movePressActive()) cancelCandidateRowAnimations();
+  });
+
+function renderCandidates(data, candidates, total, best, hasBaseline) {
+  const table = $("candidates");
+  const descriptions = candidates.map(candidate => {
+    const share = 100 * candidate.visits / Math.max(1, total);
+    const recommended = candidate.move === data.best;
+    const loss = hasBaseline && Number.isFinite(candidate.margin) ? best.margin - candidate.margin : null;
+    const marginStyle = Number.isFinite(loss) ? ` style="background:${marginLossColor(loss)}"` : "";
+    return {move: candidate.move, recommended,
+      label: `${cellName(candidate.move)}, ${candidate.visits} visits${recommended ? ", recommended" : ""}`,
+      html: `<td>${cellName(candidate.move)}${recommended ? '<span class="badge">best</span>' : ""}</td><td>${candidate.visits.toLocaleString()}</td><td><div class="bar"><i style="width:${share.toFixed(1)}%"></i><span>${share.toFixed(1)}%</span></div></td><td><span class="margin-value"${marginStyle}>${signed(candidate.margin)}</span></td>`};
+  });
+  // DOM-light consumers can still render the same accessible static table.
+  if (typeof table.querySelectorAll !== "function" || typeof document.createElement !== "function") {
+    hoverRow = null;
+    table.innerHTML = descriptions.map(row => `<tr data-move="${row.move}" tabindex="0" class="${row.recommended ? "recommend" : ""}" aria-label="${row.label}">${row.html}</tr>`).join("");
+    return;
+  }
+  const oldRows = Array.from(table.querySelectorAll("tr[data-move]"));
+  const rowsByMove = new Map(oldRows.map(row => [+row.dataset.move, row]));
+  const reordered = descriptions.length !== oldRows.length ||
+    descriptions.some((row, index) => row.move !== +oldRows[index].dataset.move);
+  const paused = Array.from(candidateRowAnimations.values()).some(animation => animation.playState === "paused");
+  const relayout = reordered || paused;
+  // Measure visual positions before cancelling: a new report can interrupt a slide.
+  const oldTops = relayout ? new Map(oldRows.map(row =>
+    [+row.dataset.move, row.getBoundingClientRect().top + candidatePane.scrollTop])) : new Map();
+  if (relayout || candidateMotion && candidateMotion.matches) cancelCandidateRowAnimations();
+  const focused = document.activeElement && document.activeElement.closest("tr[data-move]");
+  const focusedRow = focused && table.contains(focused) ? focused : null;
+  const hovered = hoverRow !== null;
+  const wanted = new Set(descriptions.map(row => row.move));
+  for (const row of oldRows) if (!wanted.has(+row.dataset.move)) row.remove();
+  const rows = descriptions.map((description, index) => {
+    const row = rowsByMove.get(description.move) || document.createElement("tr");
+    row.dataset.move = description.move;
+    row.tabIndex = 0;
+    row.classList.toggle("recommend", description.recommended);
+    row.setAttribute("aria-label", description.label);
+    row.innerHTML = description.html;
+    if (table.children[index] !== row) table.insertBefore(row, table.children[index] || null);
+    return row;
+  });
+  // Reordering an existing focused node can blur it; keep keyboard identity.
+  if (focusedRow && table.contains(focusedRow) && document.activeElement !== focusedRow)
+    focusedRow.focus({preventScroll: true});
+  if (hovered) hoverRow = rows.find(row => +row.dataset.move === hoverMove) || null;
+  if (!relayout || candidateMotion && candidateMotion.matches) return;
+  // Batch layout reads before animation writes. New rows simply appear.
+  const slides = rows.map(row => ({row,
+    delta: oldTops.get(+row.dataset.move) - (row.getBoundingClientRect().top + candidatePane.scrollTop)}));
+  for (const {row, delta} of slides) {
+    if (!Number.isFinite(delta) || Math.abs(delta) < .5 || typeof row.animate !== "function") continue;
+    row.style.zIndex = delta > 0 ? "2" : "1"; // Rising rows occlude falling ones.
+    row.style.willChange = "transform";
+    const animation = row.animate([{transform: `translateY(${delta}px)`}, {transform: "translateY(0px)"}],
+      {duration: CANDIDATE_ROW_SLIDE_MS, easing: "cubic-bezier(.2,.7,.2,1)"});
+    candidateRowAnimations.set(row, animation);
+    animation.onfinish = () => {
+      if (candidateRowAnimations.get(row) !== animation) return;
+      candidateRowAnimations.delete(row);
+      row.style.zIndex = "";
+      row.style.willChange = "";
+    };
+  }
+}
+
 function showResult(data) {
   result = data;
-  hoverRow = null; // Rows are replaced below; the move preview survives refresh.
   const total = data.candidates.reduce((sum, c) => sum + c.visits, 0);
   const candidates = data.candidates.filter(c => c.visits > 0).slice().sort((a, b) => b.visits - a.visits);
   if (stableBest !== data.best) { stableBest = data.best; stableSince = data.visits; }
   const best = data.candidates.find(candidate => candidate.move === data.best);
   const hasBaseline = best && best.visits > 0 && Number.isFinite(best.margin);
-  if (!movePressActive()) $("candidates").innerHTML = candidates.length ? candidates.map(candidate => {
-    const share = 100 * candidate.visits / Math.max(1, total);
-    const recommended = candidate.move === data.best;
-    const loss = hasBaseline && Number.isFinite(candidate.margin) ? best.margin - candidate.margin : null;
-    const marginStyle = Number.isFinite(loss) ? ` style="background:${marginLossColor(loss)}"` : "";
-    return `<tr data-move="${candidate.move}" tabindex="0" class="${recommended ? "recommend" : ""}" aria-label="${cellName(candidate.move)}, ${candidate.visits} visits${recommended ? ", recommended" : ""}"><td>${cellName(candidate.move)}${recommended ? '<span class="badge">best</span>' : ""}</td><td>${candidate.visits.toLocaleString()}</td><td><div class="bar"><i style="width:${share.toFixed(1)}%"></i><span>${share.toFixed(1)}%</span></div></td><td><span class="margin-value"${marginStyle}>${signed(candidate.margin)}</span></td></tr>`;
-  }).join("") : "";
+  if (!movePressActive()) renderCandidates(data, candidates, total, best, hasBaseline);
   drawBoard();
 }
 
@@ -513,7 +596,9 @@ function cancelSearch(clear = true) {
       suppressRowClickUntil = performance.now() + 800;
       if ($("candidates").hasPointerCapture(pressedRow.pointerId)) $("candidates").releasePointerCapture(pressedRow.pointerId);
     }
+    clearCandidateRowHover();
     result = null; hoverMove = null; hoverRow = null; stableBest = null;
+    cancelCandidateRowAnimations();
     $("candidates").innerHTML = "";
     candidatePane.scrollTop = 0;
     $("candidate-pv").textContent = "";
@@ -682,6 +767,7 @@ function previewBoardHover(event) {
   // drawBoard replaces the cell paths. Ignore fresh events for the same cell
   // so replacing a hovered path cannot create a redraw loop.
   if (hoverMove === move && !hoverRow) return;
+  clearCandidateRowHover();
   hoverMove = move; hoverRow = null;
   drawBoard();
 }
@@ -689,6 +775,7 @@ function previewBoardHover(event) {
 board.addEventListener("pointerover", previewBoardHover);
 board.addEventListener("pointerleave", event => {
   if (event.pointerType !== "mouse" || boardGesture || hoverMove === null) return;
+  clearCandidateRowHover();
   hoverMove = null; hoverRow = null;
   drawBoard();
 });
@@ -698,6 +785,8 @@ board.addEventListener("pointerdown", event => {
   const hex = event.target.closest(".hex.legal");
   if (!hex) return;
   event.preventDefault();
+  pauseCandidateRowAnimations();
+  clearCandidateRowHover();
   hoverMove = null; hoverRow = null;
   suppressClickUntil = 0;
   boardGesture = {pointerId: event.pointerId, pointerType: event.pointerType,
@@ -764,16 +853,33 @@ board.addEventListener("click", event => {
   const hex = event.target.closest(".hex.legal");
   if (hex) selectBoardCell(+hex.dataset.cell);
 });
-$("candidates").addEventListener("pointerover", event => {
+function clearCandidateRowHover() {
+  if (hoverRow) hoverRow.classList.toggle("hover-row", false);
+  candidateHoverPoint = null;
+}
+
+function previewRowHover(event) {
   const row = event.target.closest("tr[data-move]");
   if (setupPhase || movePressActive() || !row || event.pointerType === "touch" || event.pointerType === "pen") return;
   $("candidates").classList.toggle("mouse-hover", true);
+  const point = Number.isFinite(event.clientX) && Number.isFinite(event.clientY)
+    ? {x: event.clientX, y: event.clientY} : null;
+  // Layout-generated boundary events aren't mouse movement. Keep inspecting
+  // the same move while rows cross beneath a stationary pointer.
+  if (row !== hoverRow && hoverRow && $("candidates").contains(hoverRow) && point && candidateHoverPoint &&
+      point.x === candidateHoverPoint.x && point.y === candidateHoverPoint.y) return;
+  candidateHoverPoint = point;
   if (row === hoverRow) return;
+  if (hoverRow) hoverRow.classList.toggle("hover-row", false);
+  row.classList.toggle("hover-row", true);
   hoverRow = row; hoverMove = +row.dataset.move; drawBoard();
-});
+}
+
+$("candidates").addEventListener("pointerover", previewRowHover);
 $("candidates").addEventListener("pointerleave", () => {
   if (movePressActive()) return;
   if (hoverRow === null && hoverMove === null) return;
+  clearCandidateRowHover();
   hoverRow = null; hoverMove = null; drawBoard();
 });
 
@@ -870,6 +976,8 @@ $("candidates").addEventListener("pointerdown", event => {
   if (!["mouse", "touch", "pen"].includes(event.pointerType) || event.isPrimary === false || movePressActive() || timelineGesture || (event.button !== undefined && event.button !== 0)) return;
   const row = event.target.closest("tr[data-move]");
   if (!row || !result || !result.candidates.some(candidate => candidate.move === +row.dataset.move)) return;
+  pauseCandidateRowAnimations();
+  clearCandidateRowHover();
   suppressRowClickUntil = 0;
   if (event.pointerType !== "mouse") event.preventDefault();
   // Captured touch pointers can leave native :hover stuck on the original row.
@@ -886,8 +994,7 @@ $("candidates").addEventListener("pointerdown", event => {
 });
 
 $("candidates").addEventListener("pointermove", event => {
-  if (event.pointerType === "mouse" && !movePressActive() && event.target.closest("tr[data-move]"))
-    $("candidates").classList.toggle("mouse-hover", true);
+  if (event.pointerType === "mouse" && !movePressActive()) previewRowHover(event);
   if (!rowGesture || event.pointerId !== rowGesture.pointerId) return;
   const gesture = rowGesture;
   if (!insidePressedRow(event)) gesture.cancelled = true;
@@ -944,6 +1051,7 @@ $("candidates").addEventListener("keydown", event => {
   }
 });
 document.querySelectorAll("[data-view]").forEach(button => button.addEventListener("click", () => {
+  clearCandidateRowHover();
   view = button.dataset.view; hoverMove = null; hoverRow = null;
   document.querySelectorAll("[data-view]").forEach(b => { const on = b === button; b.classList.toggle("selected", on); b.setAttribute("aria-pressed", on); });
   drawBoard();

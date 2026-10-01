@@ -85,9 +85,11 @@ th:first-child { text-align: left; }
 td { padding: 8px 6px; text-align: right; border-top: 1px solid #e7e9df; }
 td:first-child { text-align: left; white-space: nowrap; }
 tr[data-move] { cursor: pointer; }
+/* Opaque rows make the higher-stacked rising move cover rows it crosses. */
+#candidates tr[data-move] { position: relative; background: var(--paper); }
 #candidates { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-#candidates td { touch-action: none; }
-#candidates.mouse-hover tr[data-move]:hover, tr.preview-row { background: #eef3e6; }
+#candidates td { touch-action: none; background: inherit; }
+#candidates.mouse-hover tr.hover-row, #candidates tr.preview-row { background: #eef3e6; }
 .recommend { color: var(--green); font-weight: 650; }
 .margin-value { display: inline-block; padding: 1px 5px; border-radius: 3px; color: #101010; font-weight: 600; }
 .badge { font-size: 10px; font-weight: 500; margin-left: 5px; }
