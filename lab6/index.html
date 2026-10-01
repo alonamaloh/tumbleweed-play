@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HighNoon — Lab 6</title>
-  <link rel="stylesheet" href="style.css?v=20260930-7">
+  <link rel="stylesheet" href="style.css?v=20260930-8">
 </head>
 <body>
   <header>
@@ -24,12 +24,6 @@
       <div id="ownership-legend-row" class="legend"><span class="white-swatch"></span> White <span id="ownership-legend" class="gradient" role="img" aria-label="Expected ownership balance"><span id="ownership-marker-value" aria-hidden="true"></span><span id="ownership-marker" aria-hidden="true"></span></span> Red <span class="red-swatch"></span></div>
       <div id="margin-loss-legend" class="legend" hidden><span class="improvement-swatch"></span> Better <span class="loss-unit">Margin loss (cells)</span><span class="margin-loss-scale"><span class="margin-loss-gradient"></span><span class="margin-loss-ticks"><span>0</span><span>−5</span><span>≤−10</span></span></span></div>
       <p id="map-caption" class="visually-hidden" aria-live="polite"></p>
-      <div class="review">
-        <button id="back" aria-label="Previous move">←</button>
-        <svg id="review" viewBox="0 0 600 32" role="slider" aria-label="Game position and expected margin" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="Start" aria-disabled="true" tabindex="-1" preserveAspectRatio="none"></svg>
-        <button id="forward" aria-label="Next move">→</button>
-        <span id="move-number">Start</span>
-      </div>
     </section>
     <aside>
       <div class="game-controls">
@@ -46,10 +40,18 @@
         <div class="controls"><button id="load" disabled>Load</button><button id="copy" disabled>Copy</button></div>
         <p id="position-error" class="error" role="alert"></p>
       </section>
+      <section class="card history-panel" aria-label="Game history">
+        <div class="review">
+          <button id="back" aria-label="Previous move">←</button>
+          <svg id="review" viewBox="0 0 600 180" role="slider" aria-label="Game position and expected margin" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="Start" aria-disabled="true" tabindex="-1" preserveAspectRatio="none"></svg>
+          <button id="forward" aria-label="Next move">→</button>
+          <span id="move-number">Start</span>
+        </div>
+      </section>
     </aside>
   </main>
   <script src="config.js"></script>
   <script src="hn.js"></script>
-  <script src="app.js?v=20260930-7"></script>
+  <script src="app.js?v=20260930-8"></script>
 </body>
 </html>

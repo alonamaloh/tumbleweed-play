@@ -19,6 +19,7 @@ const summaryCache = new Map();
 let summaryCacheBytes = 0;
 const marginHistory = new Map();
 const MARGIN_HISTORY_LIMIT = 2048;
+const MARGIN_GRAPH = Object.freeze({width: 600, left: 48, right: 584, top: 14, bottom: 150});
 
 let engine = null;
 let worker = null;
@@ -91,10 +92,29 @@ function updateTimelineLabel(index = cursor) {
   $("move-number").textContent = setupPhase ? "Start" : timelinePositionText(index);
 }
 
+function marginGraphX(index) {
+  const {left, right} = MARGIN_GRAPH;
+  return !setupPhase && history.length ? left + index * (right - left) / history.length : (left + right) / 2;
+}
+
+function marginGraphScale(margins) {
+  const largest = margins.reduce((maximum, margin) =>
+    Number.isFinite(margin) ? Math.max(maximum, Math.abs(margin)) : maximum, 1);
+  const target = largest / 2;
+  const power = 10 ** Math.floor(Math.log10(target));
+  const unit = [1, 2, 5, 10].find(value => value * power >= target);
+  const step = unit * power;
+  return {step, limit: Math.ceil(largest / step) * step};
+}
+
 function drawMarginTimeline() {
   const timeline = $("review"), disabled = !engine || !!setupPhase;
   const count = setupPhase ? 1 : history.length + 1;
-  const width = 600 / count;
+  const margins = Array.from({length: count}, (_, index) => timelineMarginAt(index));
+  const {step, limit} = marginGraphScale(margins);
+  const {left, right, top, bottom} = MARGIN_GRAPH;
+  const zero = (top + bottom) / 2;
+  const yAt = margin => zero - margin / limit * (bottom - top) / 2;
   timeline.max = setupPhase ? 0 : history.length;
   timeline.value = setupPhase ? 0 : cursor;
   timeline.disabled = disabled;
@@ -103,17 +123,42 @@ function drawMarginTimeline() {
   timeline.setAttribute("aria-valuetext", disabled ? "Start" : timelinePositionText(cursor));
   timeline.setAttribute("aria-disabled", String(disabled));
   timeline.setAttribute("tabindex", disabled ? "-1" : "0");
-  let svg = "";
-  for (let index = 0; index < count; index++) {
-    const margin = timelineMarginAt(index);
-    const known = Number.isFinite(margin);
-    const fill = known ? ownershipColor(margin / cells.length) : "#dadbd3";
-    svg += `<rect class="margin-segment${known ? "" : " margin-missing"}" data-index="${index}" x="${(index * width).toFixed(3)}" y="4" width="${(width + .05).toFixed(3)}" height="24" fill="${fill}"><title>${timelinePositionText(index)}</title></rect>`;
+  timeline.setAttribute("data-range", limit);
+  let svg = `<rect class="margin-red-region" x="${left}" y="${top}" width="${right - left}" height="${zero - top}"/>`;
+  svg += `<rect class="margin-white-region" x="${left}" y="${zero}" width="${right - left}" height="${bottom - zero}"/>`;
+  for (let tick = -limit; tick <= limit + step / 2; tick += step) {
+    const y = yAt(tick).toFixed(3);
+    svg += `<path class="${tick === 0 ? "margin-zero" : "margin-grid"}" d="M${left},${y}H${right}"/>`;
+    svg += `<text class="margin-axis-label" x="${left - 9}" y="${y}" text-anchor="end" dominant-baseline="middle">${tick > 0 ? "+" : ""}${tick}</text>`;
   }
-  svg += '<rect class="margin-timeline-outline" x=".5" y="4.5" width="599" height="23" pointer-events="none"/>';
+  const tickCount = Math.min(count, 5);
+  for (let tick = 0; tick < tickCount; tick++) {
+    const index = tickCount > 1 ? Math.round(tick * (count - 1) / (tickCount - 1)) : 0;
+    svg += `<text class="margin-axis-label" data-move-tick="${index}" x="${marginGraphX(index).toFixed(3)}" y="170" text-anchor="middle">${index}</text>`;
+  }
   if (!disabled) {
-    const x = (cursor + .5) * width;
-    svg += `<path class="margin-current" data-current="${cursor}" d="M${x.toFixed(3)},1V31" pointer-events="none"/>`;
+    const x = marginGraphX(cursor).toFixed(3);
+    svg += `<path class="margin-current" data-current="${cursor}" d="M${x},${top}V${bottom}"/>`;
+  }
+  let line = "", previousKnown = false;
+  for (let index = 0; index < count; index++) {
+    const known = Number.isFinite(margins[index]);
+    if (known) line += `${previousKnown ? "L" : "M"}${marginGraphX(index).toFixed(3)},${yAt(margins[index]).toFixed(3)}`;
+    previousKnown = known;
+  }
+  if (line) svg += `<path class="margin-line" d="${line}"/>`;
+  for (let index = 0; index < count; index++) {
+    const margin = margins[index], x = marginGraphX(index);
+    if (Number.isFinite(margin)) {
+      const fill = margin > 0 ? "#ba4238" : margin < 0 ? "#fffdf8" : "#37423a";
+      svg += `<circle class="margin-point${index === cursor && !disabled ? " current" : ""}" data-index="${index}" cx="${x.toFixed(3)}" cy="${yAt(margin).toFixed(3)}" r="3.5" fill="${fill}"/>`;
+    } else {
+      // Unknown is an explicit gap, not an invented zero-valued point.
+      svg += `<path class="margin-unknown" data-index="${index}" d="M${(x - 2).toFixed(3)},${zero - 2}L${(x + 2).toFixed(3)},${zero + 2}M${(x - 2).toFixed(3)},${zero + 2}L${(x + 2).toFixed(3)},${zero - 2}"/>`;
+    }
+    const start = index ? (marginGraphX(index - 1) + x) / 2 : left;
+    const end = index + 1 < count ? (x + marginGraphX(index + 1)) / 2 : right;
+    svg += `<rect class="margin-hit" data-index="${index}" x="${start.toFixed(3)}" y="${top}" width="${(end - start).toFixed(3)}" height="${bottom - top}"><title>${timelinePositionText(index)}</title></rect>`;
   }
   timeline.innerHTML = svg;
   updateTimelineLabel(timelineHoverIndex === null ? cursor : timelineHoverIndex);
@@ -881,8 +926,9 @@ $("review").addEventListener("input", () => reviewAt(+$("review").value));
 function reviewIndexAt(event) {
   const bounds = $("review").getBoundingClientRect();
   if (!(bounds.width > 0) || !Number.isFinite(event.clientX)) return cursor;
-  const fraction = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
-  return Math.min(history.length, Math.floor(fraction * (history.length + 1)));
+  const x = (event.clientX - bounds.left) / bounds.width * MARGIN_GRAPH.width;
+  const fraction = Math.max(0, Math.min(1, (x - MARGIN_GRAPH.left) / (MARGIN_GRAPH.right - MARGIN_GRAPH.left)));
+  return Math.round(fraction * history.length);
 }
 
 function cancelTimelineGesture() {
