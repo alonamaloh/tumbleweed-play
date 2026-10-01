@@ -6,6 +6,7 @@ const MID = SIDE - 1;
 const CENTRE = MID * N + MID;
 const $ = id => document.getElementById(id);
 const board = $("board");
+const candidatePane = $("candidate-scroll");
 const cellName = cell => cell < 0 ? "pass" : String.fromCharCode(65 + cell % N) + (Math.floor(cell / N) + 1);
 const valid = cell => Number.isInteger(cell) && cell >= 0 && cell < N * N && Math.abs(cell % N - Math.floor(cell / N)) <= MID;
 const signed = value => Number.isFinite(value) ? (value > 0 ? "+" : "") + value.toFixed(1) : "—";
@@ -154,7 +155,8 @@ function marginLossColor(loss) {
 function previewMove() {
   if (boardGesture) return boardGesture.pointerType === "mouse"
     ? boardGesture.cancelled ? null : boardGesture.cell : boardGesture.previewCell;
-  if (rowGesture) return rowGesture.cancelled ? null : rowGesture.move;
+  if (rowGesture) return rowGesture.pointerType === "mouse"
+    ? rowGesture.cancelled ? null : rowGesture.move : rowGesture.previewMove;
   return hoverMove;
 }
 
@@ -344,11 +346,13 @@ function cancelSearch(clear = true) {
       if (board.hasPointerCapture(pressedBoard.pointerId)) board.releasePointerCapture(pressedBoard.pointerId);
     }
     if (pressedRow) {
+      clearRowPreview(pressedRow);
       suppressRowClickUntil = performance.now() + 800;
       if ($("candidates").hasPointerCapture(pressedRow.pointerId)) $("candidates").releasePointerCapture(pressedRow.pointerId);
     }
     result = null; hoverMove = null; hoverRow = null; stableBest = null;
     $("candidates").innerHTML = "";
+    candidatePane.scrollTop = 0;
     $("candidate-pv").textContent = "";
     $("candidate-pv").hidden = true;
   }
@@ -558,9 +562,10 @@ board.addEventListener("pointermove", event => {
 });
 
 // Safari may also deliver native touch events during a pointer gesture.
-// Suppress panning only while inspecting the board, not elsewhere on the page.
+// Suppress native panning only during a board or candidate inspection gesture.
 document.addEventListener("touchmove", event => {
-  if (event.cancelable && boardGesture && boardGesture.pointerType !== "mouse") event.preventDefault();
+  const gesture = boardGesture || rowGesture;
+  if (event.cancelable && gesture && gesture.pointerType !== "mouse") event.preventDefault();
 }, {passive: false, capture: true});
 
 function finishBoardGesture(event, cancelled) {
@@ -608,29 +613,126 @@ function insidePressedRow(event) {
   return event.clientX >= bounds.left && event.clientX <= bounds.right && event.clientY >= bounds.top && event.clientY <= bounds.bottom;
 }
 
+function rowAtPointer(gesture) {
+  const bounds = candidatePane.getBoundingClientRect();
+  if (gesture.clientX < bounds.left || gesture.clientX > bounds.right) return null;
+  let y = gesture.clientY;
+  if (y < bounds.top || y > bounds.bottom) {
+    // Probe the visible data edge, not the header or a row hidden by clipping.
+    const data = $("candidates").getBoundingClientRect();
+    const top = Math.max(bounds.top, data.top), bottom = Math.min(bounds.bottom, data.bottom);
+    if (bottom - top < 2) return null;
+    y = Math.max(top + 1, Math.min(bottom - 1, y));
+  }
+  const target = document.elementFromPoint(gesture.clientX, y);
+  const row = target && target.closest("tr[data-move]");
+  return row && $("candidates").contains(row) && result &&
+    result.candidates.some(candidate => candidate.move === +row.dataset.move) ? row : null;
+}
+
+function updateRowPreview(gesture) {
+  const row = rowAtPointer(gesture);
+  const move = row ? +row.dataset.move : null;
+  if (gesture.previewRow === row && gesture.previewMove === move) return;
+  if (gesture.previewRow) gesture.previewRow.classList.toggle("preview-row", false);
+  gesture.previewRow = row; gesture.previewMove = move;
+  if (row) row.classList.toggle("preview-row", true);
+  hoverRow = row; hoverMove = move;
+  drawBoard(true);
+}
+
+function rowScrollSpeed(gesture) {
+  const bounds = candidatePane.getBoundingClientRect();
+  if (gesture.clientX < bounds.left || gesture.clientX > bounds.right ||
+      !(candidatePane.scrollHeight > candidatePane.clientHeight)) return 0;
+  const maxScroll = candidatePane.scrollHeight - candidatePane.clientHeight;
+  // Scroll sizes are rounded but scrollTop can be fractional at either limit.
+  if (gesture.clientY < bounds.top && candidatePane.scrollTop > 1)
+    return -Math.min(480, 120 + 4 * (bounds.top - gesture.clientY));
+  if (gesture.clientY > bounds.bottom && candidatePane.scrollTop < maxScroll - 1)
+    return Math.min(480, 120 + 4 * (gesture.clientY - bounds.bottom));
+  return 0;
+}
+
+function stopRowAutoScroll(gesture) {
+  if (gesture.scrollFrame !== null) cancelAnimationFrame(gesture.scrollFrame);
+  gesture.scrollFrame = null;
+}
+
+function clearRowPreview(gesture) {
+  stopRowAutoScroll(gesture);
+  if (gesture.previewRow) gesture.previewRow.classList.toggle("preview-row", false);
+}
+
+function scrollRowGesture(now) {
+  const gesture = rowGesture;
+  if (!gesture || gesture.pointerType === "mouse") return;
+  gesture.scrollFrame = null;
+  if (gesture.key !== positionKey()) return;
+  const speed = rowScrollSpeed(gesture);
+  if (!speed) return;
+  const elapsed = Math.max(0, Math.min(50, now - gesture.lastScrollTime));
+  const maxScroll = candidatePane.scrollHeight - candidatePane.clientHeight;
+  const before = candidatePane.scrollTop;
+  candidatePane.scrollTop = Math.max(0, Math.min(maxScroll, before + speed * elapsed / 1000));
+  if (candidatePane.scrollTop === before) {
+    // The first frame can precede the event timestamp, and fractional steps
+    // can round away. Accumulate time until a scroll step becomes visible.
+    if (rowScrollSpeed(gesture)) gesture.scrollFrame = requestAnimationFrame(scrollRowGesture);
+    return;
+  }
+  gesture.lastScrollTime = now;
+  gesture.cancelled = true; // Scrolling can never turn back into playing.
+  updateRowPreview(gesture); // The finger can remain still as rows move below it.
+  if (rowGesture === gesture && rowScrollSpeed(gesture))
+    gesture.scrollFrame = requestAnimationFrame(scrollRowGesture);
+}
+
+function updateRowAutoScroll(gesture) {
+  if (!rowScrollSpeed(gesture)) { stopRowAutoScroll(gesture); return; }
+  if (gesture.scrollFrame === null) {
+    gesture.lastScrollTime = performance.now();
+    gesture.scrollFrame = requestAnimationFrame(scrollRowGesture);
+  }
+}
+
 $("candidates").addEventListener("pointerdown", event => {
   if (!["mouse", "touch", "pen"].includes(event.pointerType) || event.isPrimary === false || movePressActive() || (event.button !== undefined && event.button !== 0)) return;
   const row = event.target.closest("tr[data-move]");
   if (!row || !result || !result.candidates.some(candidate => candidate.move === +row.dataset.move)) return;
   suppressRowClickUntil = 0;
-  rowGesture = {pointerId: event.pointerId, move: +row.dataset.move, row, key: positionKey(), cancelled: false};
+  if (event.pointerType !== "mouse") event.preventDefault();
+  rowGesture = {pointerId: event.pointerId, pointerType: event.pointerType,
+    move: +row.dataset.move, row, previewMove: +row.dataset.move, previewRow: row,
+    clientX: event.clientX, clientY: event.clientY, scrollFrame: null,
+    lastScrollTime: 0, key: positionKey(), cancelled: false};
   $("candidates").setPointerCapture(event.pointerId);
   hoverMove = rowGesture.move; hoverRow = row;
+  row.classList.toggle("preview-row", true);
   drawBoard(true);
-  // Native touch panning stays enabled here: a scroll produces pointercancel.
 });
 
 $("candidates").addEventListener("pointermove", event => {
-  if (rowGesture && event.pointerId === rowGesture.pointerId && !rowGesture.cancelled && !insidePressedRow(event)) {
-    rowGesture.cancelled = true; hoverMove = null; hoverRow = null;
-    drawBoard(true);
+  if (!rowGesture || event.pointerId !== rowGesture.pointerId) return;
+  const gesture = rowGesture;
+  if (!insidePressedRow(event)) gesture.cancelled = true;
+  if (gesture.pointerType !== "mouse") {
+    event.preventDefault();
+    gesture.clientX = event.clientX; gesture.clientY = event.clientY;
+    updateRowPreview(gesture);
+    updateRowAutoScroll(gesture);
+  } else if (gesture.cancelled && gesture.previewMove !== null) {
+    gesture.previewMove = null; gesture.previewRow.classList.toggle("preview-row", false);
+    hoverMove = null; hoverRow = null; drawBoard(true);
   }
 });
 
 function finishRowGesture(event, cancelled) {
   if (!rowGesture || event.pointerId !== rowGesture.pointerId) return;
   const gesture = rowGesture;
+  if (gesture.pointerType !== "mouse") event.preventDefault();
   const play = !cancelled && !gesture.cancelled && gesture.key === positionKey() && insidePressedRow(event);
+  clearRowPreview(gesture);
   rowGesture = null;
   if (!play) { hoverMove = null; hoverRow = null; }
   suppressRowClickUntil = performance.now() + 800;
@@ -643,13 +745,17 @@ $("candidates").addEventListener("pointerup", event => finishRowGesture(event, f
 $("candidates").addEventListener("pointercancel", event => finishRowGesture(event, true));
 $("candidates").addEventListener("lostpointercapture", event => {
   if (rowGesture && event.pointerId === rowGesture.pointerId) {
+    clearRowPreview(rowGesture);
     rowGesture = null; suppressRowClickUntil = performance.now() + 800;
     hoverMove = null; hoverRow = null;
     if (result) showResult(result); else drawBoard();
   }
 });
+$("candidates").addEventListener("contextmenu", event => event.preventDefault());
 $("candidates").addEventListener("click", event => {
-  if (performance.now() < suppressRowClickUntil) { event.preventDefault(); suppressRowClickUntil = 0; return; }
+  if (performance.now() < suppressRowClickUntil || event.pointerType === "touch" || event.pointerType === "pen") {
+    event.preventDefault(); suppressRowClickUntil = 0; return;
+  }
   const row = event.target.closest("tr[data-move]");
   if (!row) return;
   const move = +row.dataset.move;
