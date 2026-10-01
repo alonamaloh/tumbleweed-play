@@ -120,9 +120,15 @@ function drawMarginTimeline() {
 }
 
 function cacheSearchResult(key, data) {
-  if (!key || data.type !== "done" || data.stopped || data.capacityReached || !(data.visits >= FIXED_SEARCH_VISITS)) return;
+  if (!key || (data.type !== "progress" && data.type !== "done")) return;
   const margin = reportMargin(data);
-  rememberTimelineMargin(key, margin);
+  // Keep the latest estimate even if we leave before this search finishes.
+  // A timeline color must not make an unfinished position skip reanalysis.
+  if (Number.isFinite(margin)) {
+    rememberTimelineMargin(key, margin);
+    drawMarginTimeline();
+  }
+  if (data.type !== "done" || data.stopped || data.capacityReached || !(data.visits >= FIXED_SEARCH_VISITS)) return;
   // Cache reports only, never engine instances or trees. Compact maps keep a
   // full game's review history modest; scores and visit counts stay doubles.
   const candidates = data.candidates.map(candidate => Object.freeze({
@@ -151,7 +157,6 @@ function cacheSearchResult(key, data) {
     summaryCacheBytes -= summaryCache.get(oldest).bytes;
     summaryCache.delete(oldest);
   }
-  drawMarginTimeline();
 }
 
 function getCachedResult(key) {
