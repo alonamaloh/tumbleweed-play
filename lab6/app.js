@@ -13,7 +13,7 @@ const signed = value => Number.isFinite(value) ? (value > 0 ? "+" : "") + value.
 const cells = Array.from({length: N * N}, (_, i) => i).filter(valid);
 const radius = SIDE === 6 ? 27 : 19.5;
 const FIXED_SEARCH_VISITS = ANALYSIS_CONFIG.searchSims || 100000;
-const CANDIDATE_ROW_SLIDE_MS = 180;
+const CANDIDATE_ROW_SLIDE_MS = 360;
 const candidateRowAnimations = new Map();
 const candidateMotion = typeof window !== "undefined" && typeof window.matchMedia === "function"
   ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
@@ -36,10 +36,11 @@ let cursor = 0;
 let generation = 0;
 let searching = false;
 let result = null;
+let candidateSort = "visits";
+let renderedCandidateMoves = [];
 let view = "normal";
 let hoverMove = null;
 let hoverRow = null;
-let candidateHoverPoint = null;
 let boardGesture = null;
 let rowGesture = null;
 let suppressClickUntil = 0;
@@ -348,8 +349,10 @@ function drawBoard(force = false) {
   if (!engine) return;
   // Only board structure freezes during a press; the marker stays with the graph.
   const legendLabel = updateMarginMarker();
-  if (movePressActive() && !force) return;
   const placing = setupPhase !== 0;
+  $("ownership-legend-row").hidden = placing || view !== "ownership";
+  $("margin-loss-legend").hidden = placing || view !== "margin";
+  if (movePressActive() && !force) return;
   const preview = placing ? null : previewCandidate();
   const selectedMove = previewMove();
   // The prospective stack is known before any search statistics arrive.
@@ -368,8 +371,6 @@ function drawBoard(force = false) {
   const bestCandidate = displayedCandidates.find(candidate => candidate.move === displayedBest);
   const hasBaseline = bestCandidate && bestCandidate.visits > 0 && Number.isFinite(bestCandidate.margin);
   const marginCandidates = new Map(displayedCandidates.map(candidate => [candidate.move, candidate]));
-  $("ownership-legend-row").hidden = placing || marginOn;
-  $("margin-loss-legend").hidden = placing || !marginOn;
   const top = displayedCandidates.filter(c => c.visits > 0).slice().sort((a, b) => b.visits - a.visits).slice(0, 6);
   const total = displayedCandidates.reduce((sum, c) => sum + c.visits, 0);
   const rootVisitTotal = result ? result.candidates.reduce((sum, c) => sum + c.visits, 0) : 0;
@@ -426,7 +427,7 @@ function drawBoard(force = false) {
       svg += `<circle class="stack${ghost ? " preview-stack" : ""}" cx="${x}" cy="${y}" r="${stackRadius}" fill="${stackFill}" stroke="${ghost ? "#00e676" : "#555b50"}" stroke-width="${ghost ? 2 : 1}"${ghost ? ` data-preview-root="${ghostMove}" stroke-dasharray="3,2" opacity=".8"` : ""}/>`;
       svg += `<text class="stack-number" x="${x}" y="${y}" fill="${own === 2 ? "#454b49" : "#fff"}">${height}</text>`;
     }
-    if (territory === 1 || territory === 2) svg += `<g pointer-events="none" transform="translate(${x - radius * .67},${y + radius * .52})"><path d="M-2,-1v-2a2,2 0 0 1 4,0v2" fill="none" stroke="#575e53" stroke-width="1.3"/><rect x="-3" y="-1" width="6" height="5" rx="1" fill="${territory === 1 ? "#ba4238" : "#fffefa"}" stroke="#575e53" stroke-width=".9"/></g>`;
+    if (territory === 1 || territory === 2) svg += `<g class="territory-lock" data-lock-cell="${cell}" pointer-events="none" transform="translate(${x - radius * .52},${y + radius * .28})"><path d="M-2,-1v-2a2,2 0 0 1 4,0v2" fill="none" stroke="#575e53" stroke-width="1.3"/><rect x="-3" y="-1" width="6" height="5" rx="1" fill="${territory === 1 ? "#ba4238" : "#fffefa"}" stroke="#575e53" stroke-width=".9"/></g>`;
     if (cursor && cell === history[cursor - 1]) svg += `<path d="${hexPath(x, y)}" fill="none" stroke="#bb853d" stroke-width="3" pointer-events="none"/>`;
     if (ghost) svg += `<path d="${hexPath(x, y)}" fill="none" stroke="#00e676" stroke-width="4" pointer-events="none"/>`;
     else if (!placing && result && cell === displayedBest) svg += `<path d="${hexPath(x, y)}" fill="none" stroke="#00e676" stroke-width="3" stroke-dasharray="4,3" pointer-events="none"/>`;
@@ -501,21 +502,49 @@ if (candidateMotion && typeof candidateMotion.addEventListener === "function")
     if (candidateMotion.matches && !movePressActive()) cancelCandidateRowAnimations();
   });
 
-function renderCandidates(data, candidates, total, best, hasBaseline) {
+function sortedCandidates(data) {
+  return data.candidates.filter(candidate => candidate.visits > 0).slice().sort((a, b) => {
+    if (candidateSort === "margin") {
+      const aKnown = Number.isFinite(a.margin), bKnown = Number.isFinite(b.margin);
+      if (aKnown !== bKnown) return aKnown ? -1 : 1;
+      if (aKnown && a.margin !== b.margin) return b.margin - a.margin;
+    }
+    return b.visits - a.visits || a.move - b.move;
+  });
+}
+
+function updateCandidateSortHeaders() {
+  for (const sort of ["visits", "margin"]) {
+    const selected = candidateSort === sort;
+    $(`${sort}-heading`).setAttribute("aria-sort", selected ? "descending" : "none");
+    $(`sort-${sort}`).setAttribute("aria-pressed", String(selected));
+  }
+}
+
+function setCandidateSort(sort) {
+  if (!["visits", "margin"].includes(sort) || candidateSort === sort) return;
+  candidateSort = sort;
+  // A held preview keeps the displayed order and its sort marker until release.
+  if (result) showResult(result);
+  else updateCandidateSortHeaders();
+}
+
+function renderCandidates(candidates, total, best, hasBaseline) {
   const table = $("candidates");
+  renderedCandidateMoves = candidates.map(candidate => candidate.move);
+  updateCandidateSortHeaders();
   const descriptions = candidates.map(candidate => {
     const share = 100 * candidate.visits / Math.max(1, total);
-    const recommended = candidate.move === data.best;
     const loss = hasBaseline && Number.isFinite(candidate.margin) ? best.margin - candidate.margin : null;
     const marginStyle = Number.isFinite(loss) ? ` style="background:${marginLossColor(loss)}"` : "";
-    return {move: candidate.move, recommended,
-      label: `${cellName(candidate.move)}, ${candidate.visits} visits${recommended ? ", recommended" : ""}`,
-      html: `<td>${cellName(candidate.move)}${recommended ? '<span class="badge">best</span>' : ""}</td><td>${candidate.visits.toLocaleString()}</td><td><div class="bar"><i style="width:${share.toFixed(1)}%"></i><span>${share.toFixed(1)}%</span></div></td><td><span class="margin-value"${marginStyle}>${signed(candidate.margin)}</span></td>`};
+    return {move: candidate.move,
+      label: `${cellName(candidate.move)}, ${candidate.visits} visits`,
+      html: `<td>${cellName(candidate.move)}</td><td>${candidate.visits.toLocaleString()}</td><td><div class="bar"><i style="width:${share.toFixed(1)}%"></i><span>${share.toFixed(1)}%</span></div></td><td><span class="margin-value"${marginStyle}>${signed(candidate.margin)}</span></td>`};
   });
   // DOM-light consumers can still render the same accessible static table.
   if (typeof table.querySelectorAll !== "function" || typeof document.createElement !== "function") {
     hoverRow = null;
-    table.innerHTML = descriptions.map(row => `<tr data-move="${row.move}" tabindex="0" class="${row.recommended ? "recommend" : ""}" aria-label="${row.label}">${row.html}</tr>`).join("");
+    table.innerHTML = descriptions.map(row => `<tr data-move="${row.move}" tabindex="0" aria-label="${row.label}">${row.html}</tr>`).join("");
     return;
   }
   const oldRows = Array.from(table.querySelectorAll("tr[data-move]"));
@@ -537,7 +566,6 @@ function renderCandidates(data, candidates, total, best, hasBaseline) {
     const row = rowsByMove.get(description.move) || document.createElement("tr");
     row.dataset.move = description.move;
     row.tabIndex = 0;
-    row.classList.toggle("recommend", description.recommended);
     row.setAttribute("aria-label", description.label);
     row.innerHTML = description.html;
     if (table.children[index] !== row) table.insertBefore(row, table.children[index] || null);
@@ -570,11 +598,11 @@ function renderCandidates(data, candidates, total, best, hasBaseline) {
 function showResult(data) {
   result = data;
   const total = data.candidates.reduce((sum, c) => sum + c.visits, 0);
-  const candidates = data.candidates.filter(c => c.visits > 0).slice().sort((a, b) => b.visits - a.visits);
+  const candidates = sortedCandidates(data);
   if (stableBest !== data.best) { stableBest = data.best; stableSince = data.visits; }
   const best = data.candidates.find(candidate => candidate.move === data.best);
   const hasBaseline = best && best.visits > 0 && Number.isFinite(best.margin);
-  if (!movePressActive()) renderCandidates(data, candidates, total, best, hasBaseline);
+  if (!movePressActive()) renderCandidates(candidates, total, best, hasBaseline);
   drawBoard();
 }
 
@@ -600,6 +628,8 @@ function cancelSearch(clear = true) {
     result = null; hoverMove = null; hoverRow = null; stableBest = null;
     cancelCandidateRowAnimations();
     $("candidates").innerHTML = "";
+    renderedCandidateMoves = [];
+    updateCandidateSortHeaders();
     candidatePane.scrollTop = 0;
     $("candidate-pv").textContent = "";
     $("candidate-pv").hidden = true;
@@ -855,20 +885,14 @@ board.addEventListener("click", event => {
 });
 function clearCandidateRowHover() {
   if (hoverRow) hoverRow.classList.toggle("hover-row", false);
-  candidateHoverPoint = null;
 }
 
 function previewRowHover(event) {
   const row = event.target.closest("tr[data-move]");
   if (setupPhase || movePressActive() || !row || event.pointerType === "touch" || event.pointerType === "pen") return;
   $("candidates").classList.toggle("mouse-hover", true);
-  const point = Number.isFinite(event.clientX) && Number.isFinite(event.clientY)
-    ? {x: event.clientX, y: event.clientY} : null;
-  // Layout-generated boundary events aren't mouse movement. Keep inspecting
-  // the same move while rows cross beneath a stationary pointer.
-  if (row !== hoverRow && hoverRow && $("candidates").contains(hoverRow) && point && candidateHoverPoint &&
-      point.x === candidateHoverPoint.x && point.y === candidateHoverPoint.y) return;
-  candidateHoverPoint = point;
+  // Boundary events from sliding rows also update the preview: inspect the
+  // move under the pointer, not the move previously occupying that list slot.
   if (row === hoverRow) return;
   if (hoverRow) hoverRow.classList.toggle("hover-row", false);
   row.classList.toggle("hover-row", true);
@@ -1056,6 +1080,8 @@ document.querySelectorAll("[data-view]").forEach(button => button.addEventListen
   document.querySelectorAll("[data-view]").forEach(b => { const on = b === button; b.classList.toggle("selected", on); b.setAttribute("aria-pressed", on); });
   drawBoard();
 }));
+for (const sort of ["visits", "margin"])
+  $(`sort-${sort}`).addEventListener("click", () => setCandidateSort(sort));
 $("load").addEventListener("click", () => loadPosition());
 $("newgame").addEventListener("click", newGame);
 $("copy").addEventListener("click", async () => {
@@ -1155,14 +1181,21 @@ document.addEventListener("keydown", event => {
     reviewAt(cursor + (event.key === "ArrowLeft" ? -1 : 1));
     updateTimelineLabel();
   } else if (event.key === " ") {
-    // Space is a game command even with a mode button or candidate focused.
+    // Space is a game command even with a sort/mode button or candidate focused.
+    // Sort buttons still retain their native Enter activation.
     // Consume repeats and empty results without scrolling or activating it.
     event.preventDefault();
+    // A click-focused control otherwise gains a keyboard focus ring on Space,
+    // although this key plays a move rather than activating that control.
+    const control = event.target && event.target.closest
+      ? event.target.closest("[data-view], [data-candidate-sort]") : null;
+    if (control && typeof control.blur === "function") control.blur();
     if (event.repeat || !engine || setupPhase || engine._hn_score(2) || !result) return;
-    const best = result.candidates.find(candidate => candidate.move === result.best && candidate.visits > 0);
-    if (!best || !valid(best.move)) return;
+    // Read the displayed rank, not a newer report's order during a held press.
+    const move = renderedCandidateMoves[0];
+    if (!valid(move) || !result.candidates.some(candidate => candidate.move === move && candidate.visits > 0)) return;
     cancelTimelineGesture();
-    playMove(best.move);
+    playMove(move);
   }
 });
 

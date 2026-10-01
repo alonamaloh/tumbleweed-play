@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HighNoon — Lab 6</title>
-  <link rel="stylesheet" href="style.css?v=20261001-13">
+  <link rel="stylesheet" href="style.css?v=20261001-17">
 </head>
 <body>
   <header>
@@ -22,7 +22,7 @@
         <svg id="board" viewBox="0 0 600 560" aria-label="Tumbleweed board"></svg>
       </div>
       <div id="ownership-legend-row" class="legend"><span class="white-swatch"></span> White <span id="ownership-legend" class="gradient" role="img" aria-label="Expected ownership balance"><span id="ownership-marker-value" aria-hidden="true"></span><span id="ownership-marker" aria-hidden="true"></span></span> Red <span class="red-swatch"></span></div>
-      <div id="margin-loss-legend" class="legend" hidden><span class="improvement-swatch"></span> Better <span class="loss-unit">Margin loss (cells)</span><span class="margin-loss-scale"><span class="margin-loss-gradient"></span><span class="margin-loss-ticks"><span>0</span><span>−5</span><span>≤−10</span></span></span></div>
+      <div id="margin-loss-legend" class="legend" hidden><span>Margin loss (cells)</span><span class="margin-loss-scale"><span class="margin-loss-gradient"></span><span class="margin-loss-ticks"><span>0</span><span>−5</span><span>≤−10</span></span></span></div>
       <p id="map-caption" class="visually-hidden" aria-live="polite"></p>
     </section>
     <aside>
@@ -32,7 +32,20 @@
       </div>
       <p id="analysis-error" class="small error" role="alert"></p>
       <section class="card candidates">
-        <div id="candidate-scroll" class="table-wrap"><table aria-label="Candidate moves"><thead><tr><th>Move</th><th>Visits</th><th>Effort</th><th>Margin</th></tr></thead><tbody id="candidates"></tbody></table></div>
+        <div id="candidate-scroll" class="table-wrap">
+          <table aria-label="Candidate moves">
+            <thead><tr>
+              <th scope="col">Move</th>
+              <th id="visits-heading" scope="colgroup" colspan="2" aria-sort="descending">
+                <button id="sort-visits" class="candidate-sort" type="button" data-candidate-sort="visits" aria-pressed="true">Visits<span class="sort-indicator" aria-hidden="true"></span></button>
+              </th>
+              <th id="margin-heading" scope="col" aria-sort="none">
+                <button id="sort-margin" class="candidate-sort" type="button" data-candidate-sort="margin" aria-pressed="false">Margin<span class="sort-indicator" aria-hidden="true"></span></button>
+              </th>
+            </tr></thead>
+            <tbody id="candidates"></tbody>
+          </table>
+        </div>
         <p id="candidate-pv" class="small" hidden></p>
       </section>
       <section class="card position">
@@ -52,6 +65,6 @@
   </main>
   <script src="config.js"></script>
   <script src="hn.js"></script>
-  <script src="app.js?v=20261001-13"></script>
+  <script src="app.js?v=20261001-17"></script>
 </body>
 </html>

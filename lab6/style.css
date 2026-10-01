@@ -32,8 +32,6 @@ main { max-width: 1220px; margin: auto; display: grid; grid-template-columns: mi
 .white-swatch, .red-swatch { width: 8px; height: 8px; border-radius: 50%; background: var(--white); }
 .white-swatch { border: 1px solid #b7bcb2; }
 .red-swatch { background: var(--red); }
-.improvement-swatch { width: 8px; height: 8px; border-radius: 50%; background: #956ac7; }
-.loss-unit { margin-left: 8px; }
 .margin-loss-scale { display: inline-flex; width: 150px; flex-direction: column; padding-top: 4px; }
 .margin-loss-gradient { height: 9px; border-radius: 5px; background: linear-gradient(90deg, #4f9c68, #e6b952, #cf574c); }
 .margin-loss-ticks { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
@@ -82,6 +80,13 @@ summary { cursor: pointer; font-weight: 600; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 th { text-align: right; color: var(--muted); font-size: 11px; font-weight: 500; padding: 6px; }
 th:first-child { text-align: left; }
+#visits-heading { text-align: center; }
+#visits-heading, #margin-heading { padding-top: 0; padding-bottom: 0; }
+.candidate-sort { padding: 6px 2px; border: 0; border-radius: 3px; background: transparent; color: inherit; font: inherit; }
+.candidate-sort:focus-visible { outline: 2px solid var(--green); outline-offset: 1px; }
+th[aria-sort="descending"] .candidate-sort { color: var(--ink); }
+.sort-indicator { display: inline-block; margin-left: 4px; border-left: 3px solid transparent; border-right: 3px solid transparent; border-top: 4px solid currentColor; vertical-align: middle; visibility: hidden; }
+th[aria-sort="descending"] .sort-indicator { visibility: visible; }
 td { padding: 8px 6px; text-align: right; border-top: 1px solid #e7e9df; }
 td:first-child { text-align: left; white-space: nowrap; }
 tr[data-move] { cursor: pointer; }
@@ -90,9 +95,7 @@ tr[data-move] { cursor: pointer; }
 #candidates { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 #candidates td { touch-action: none; background: inherit; }
 #candidates.mouse-hover tr.hover-row, #candidates tr.preview-row { background: #eef3e6; }
-.recommend { color: var(--green); font-weight: 650; }
 .margin-value { display: inline-block; padding: 1px 5px; border-radius: 3px; color: #101010; font-weight: 600; }
-.badge { font-size: 10px; font-weight: 500; margin-left: 5px; }
 .bar { position: relative; background: #e8ece0; border-radius: 3px; min-width: 54px; text-align: center; overflow: hidden; }
 .bar > i { position: absolute; background: #baceaa; left: 0; top: 0; bottom: 0; }
 .bar > span { position: relative; padding: 0 4px; }
