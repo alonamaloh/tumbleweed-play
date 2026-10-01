@@ -162,13 +162,7 @@ function previewCandidate() {
   if (setupPhase) return null;
   const move = previewMove();
   const candidate = result && move !== null ? result.candidates.find(c => c.move === move) || null : null;
-  return candidate && (previewMode() !== "ownership" || candidate.samples > 0) ? candidate : null;
-}
-
-function previewMode() {
-  // Mouse previews keep Normal plain; a deliberate touch press can peek at
-  // the move's ownership map without changing the selected display mode.
-  return view === "normal" && boardGesture && boardGesture.preview ? "ownership" : view;
+  return candidate && (view !== "ownership" || candidate.samples > 0) ? candidate : null;
 }
 
 function movePressActive() { return !!boardGesture || !!rowGesture; }
@@ -183,8 +177,8 @@ function drawBoard(force = false) {
   // Preview it read-only without claiming an unsearched conditional map.
   const ghostLegal = placing ? legalStartCell(selectedMove) : valid(selectedMove) && !engine._hn_score(2) && engine._hn_value(selectedMove) > 0;
   const ghostMove = ghostLegal ? selectedMove : null;
-  const ownershipPreview = preview && previewMode() === "ownership";
-  const replyPreview = preview && (previewMode() === "visits" || previewMode() === "margin");
+  const ownershipPreview = preview && view === "ownership";
+  const replyPreview = preview && (view === "visits" || view === "margin");
   const map = placing ? null : ownershipPreview ? preview.ownership : result && result.ownership;
   const ownershipOn = !placing && (!!ownershipPreview || view === "ownership");
   const marginOn = !placing && view === "margin" && !ownershipPreview;
@@ -296,9 +290,9 @@ function drawBoard(force = false) {
   const legendLabel = `Red ${signed(legendMargin)} cells · ${legendSource}.`;
   $("ownership-legend").title = legendLabel;
   $("ownership-legend").setAttribute("aria-label", legendLabel);
-  if (boardGesture && boardGesture.preview && !boardGesture.cancelled && !preview) $("map-caption").textContent = `No searched ownership yet for ${cellName(boardGesture.cell)}. Release to play; slide outside to cancel.`;
+  if (boardGesture && view === "ownership" && !boardGesture.cancelled && !preview) $("map-caption").textContent = `No searched ownership yet for ${cellName(boardGesture.cell)}. Release to play; slide outside to cancel.`;
   else if (replyPreview) $("map-caption").textContent = context.textContent;
-  else if (ownershipPreview) $("map-caption").textContent = `After ${cellName(preview.move)} · expected margin ${signed(mapMargin)} for Red · ${preview.samples.toLocaleString()} leaf predictions${boardGesture && boardGesture.preview && !boardGesture.cancelled ? " · release to play" : ""}.`;
+  else if (ownershipPreview) $("map-caption").textContent = `After ${cellName(preview.move)} · expected margin ${signed(mapMargin)} for Red · ${preview.samples.toLocaleString()} leaf predictions${boardGesture && !boardGesture.cancelled ? " · release to play" : ""}.`;
   else if (view === "ownership") $("map-caption").textContent = result && result.samples ? `All searched lines · Red ${signed(mapMargin)} cells · ${result.samples.toLocaleString()} leaf predictions.` : legendLabel;
   else if (marginOn) $("map-caption").textContent = result ? `Margins for ${displayedSide === 1 ? "Red" : "White"}${hasBaseline ? `; colors show loss relative to ${cellName(displayedBest)}` : ""}.` : "No searched margins yet.";
   else $("map-caption").textContent = legendLabel;
@@ -536,7 +530,7 @@ board.addEventListener("pointerdown", event => {
   suppressClickUntil = 0;
   boardGesture = {pointerId: event.pointerId, pointerType: event.pointerType,
     cell: +hex.dataset.cell, previewCell: +hex.dataset.cell, cancelled: false,
-    preview: !setupPhase && (event.pointerType !== "mouse" || view !== "normal"), key: positionKey()};
+    key: positionKey()};
   board.setPointerCapture(event.pointerId);
   drawBoard(true);
 });
