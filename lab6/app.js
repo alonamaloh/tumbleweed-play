@@ -17,6 +17,8 @@ const SUMMARY_CACHE_LIMIT = 512;
 const SUMMARY_CACHE_BYTE_LIMIT = 64 * 1024 * 1024;
 const summaryCache = new Map();
 let summaryCacheBytes = 0;
+const marginHistory = new Map();
+const MARGIN_HISTORY_LIMIT = 2048;
 
 let engine = null;
 let worker = null;
@@ -39,14 +41,88 @@ let stableSince = 0;
 let activePositionKey = null;
 let setupPhase = 0; // 0: play, 1: choose Red, 2: choose White.
 let setupRed = null;
+let timelineGesture = null;
+let timelineHoverIndex = null;
+let suppressTimelineClickUntil = 0;
+
+function historyPositionKey(index) {
+  return JSON.stringify([SIDE, starts[0], starts[1], history.slice(0, index)]);
+}
 
 function positionKey() {
   if (setupPhase) return JSON.stringify([SIDE, "setup", setupPhase, setupRed]);
-  return JSON.stringify([SIDE, starts[0], starts[1], history.slice(0, cursor)]);
+  return historyPositionKey(cursor);
+}
+
+function reportMargin(data) {
+  if (!data || !(data.samples > 0) || !data.ownership) return null;
+  let margin = 0;
+  for (const cell of cells) {
+    if (!Number.isFinite(data.ownership[cell])) return null;
+    margin += data.ownership[cell];
+  }
+  return margin; // Ownership reports are already Red-relative, even on White's turn.
+}
+
+function rememberTimelineMargin(key, margin) {
+  if (!key || !Number.isFinite(margin)) return;
+  marginHistory.delete(key);
+  marginHistory.set(key, margin);
+  while (marginHistory.size > MARGIN_HISTORY_LIMIT)
+    marginHistory.delete(marginHistory.keys().next().value);
+}
+
+function timelineMarginAt(index) {
+  if (setupPhase || !Number.isInteger(index) || index < 0 || index > history.length) return null;
+  const key = historyPositionKey(index);
+  if (marginHistory.has(key)) return marginHistory.get(key);
+  // Reading the whole timeline must not promote every summary in the LRU.
+  const cached = summaryCache.get(key);
+  return cached && Number.isFinite(cached.margin) ? cached.margin : null;
+}
+
+function timelinePositionText(index) {
+  const position = index ? `Move ${index}/${history.length}` : "Start";
+  const margin = timelineMarginAt(index);
+  return Number.isFinite(margin) ? `${position} · Red ${signed(margin)}` : position;
+}
+
+function updateTimelineLabel(index = cursor) {
+  $("move-number").textContent = setupPhase ? "Start" : timelinePositionText(index);
+}
+
+function drawMarginTimeline() {
+  const timeline = $("review"), disabled = !engine || !!setupPhase;
+  const count = setupPhase ? 1 : history.length + 1;
+  const width = 600 / count;
+  timeline.max = setupPhase ? 0 : history.length;
+  timeline.value = setupPhase ? 0 : cursor;
+  timeline.disabled = disabled;
+  timeline.setAttribute("aria-valuemax", timeline.max);
+  timeline.setAttribute("aria-valuenow", timeline.value);
+  timeline.setAttribute("aria-valuetext", disabled ? "Start" : timelinePositionText(cursor));
+  timeline.setAttribute("aria-disabled", String(disabled));
+  timeline.setAttribute("tabindex", disabled ? "-1" : "0");
+  let svg = "";
+  for (let index = 0; index < count; index++) {
+    const margin = timelineMarginAt(index);
+    const known = Number.isFinite(margin);
+    const fill = known ? ownershipColor(margin / cells.length) : "#dadbd3";
+    svg += `<rect class="margin-segment${known ? "" : " margin-missing"}" data-index="${index}" x="${(index * width).toFixed(3)}" y="4" width="${(width + .05).toFixed(3)}" height="24" fill="${fill}"><title>${timelinePositionText(index)}</title></rect>`;
+  }
+  svg += '<rect class="margin-timeline-outline" x=".5" y="4.5" width="599" height="23" pointer-events="none"/>';
+  if (!disabled) {
+    const x = (cursor + .5) * width;
+    svg += `<path class="margin-current" data-current="${cursor}" d="M${x.toFixed(3)},1V31" pointer-events="none"/>`;
+  }
+  timeline.innerHTML = svg;
+  updateTimelineLabel(timelineHoverIndex === null ? cursor : timelineHoverIndex);
 }
 
 function cacheSearchResult(key, data) {
   if (!key || data.type !== "done" || data.stopped || data.capacityReached || !(data.visits >= FIXED_SEARCH_VISITS)) return;
+  const margin = reportMargin(data);
+  rememberTimelineMargin(key, margin);
   // Cache reports only, never engine instances or trees. Compact maps keep a
   // full game's review history modest; scores and visit counts stay doubles.
   const candidates = data.candidates.map(candidate => Object.freeze({
@@ -68,13 +144,14 @@ function cacheSearchResult(key, data) {
   const previous = summaryCache.get(key);
   if (previous) summaryCacheBytes -= previous.bytes;
   summaryCache.delete(key);
-  summaryCache.set(key, Object.freeze({data: snapshot, stableBest, stableSince, bytes}));
+  summaryCache.set(key, Object.freeze({data: snapshot, margin, stableBest, stableSince, bytes}));
   summaryCacheBytes += bytes;
   while (summaryCache.size > SUMMARY_CACHE_LIMIT || summaryCacheBytes > SUMMARY_CACHE_BYTE_LIMIT) {
     const oldest = summaryCache.keys().next().value;
     summaryCacheBytes -= summaryCache.get(oldest).bytes;
     summaryCache.delete(oldest);
   }
+  drawMarginTimeline();
 }
 
 function getCachedResult(key) {
@@ -389,24 +466,20 @@ function refreshPosition() {
     $("turn-stone").hidden = false;
     $("turn-stone").classList.toggle("red", setupPhase === 1);
     $("turn-indicator").classList.toggle("red", setupPhase === 1);
-    $("review").max = 0; $("review").value = 0;
-    $("review").disabled = true;
     $("back").disabled = true; $("forward").disabled = true;
-    $("move-number").textContent = "Start";
+    drawMarginTimeline();
     $("moves").value = setupRed === null ? "" : cellName(setupRed);
     drawBoard();
     return;
   }
-  $("review").disabled = false;
   const settled = !!engine._hn_score(2), redToMove = engine._hn_stm() === 1;
+  if (settled) rememberTimelineMargin(positionKey(), engine._hn_score(0) - engine._hn_score(1));
   const turnText = settled ? `Settled · Red ${engine._hn_score(0)}, White ${engine._hn_score(1)}` : redToMove ? "Red to move" : "White to move";
   $("turn-text").textContent = workerReady ? turnText : "Loading…";
   $("turn-stone").hidden = settled || !workerReady;
   $("turn-stone").classList.toggle("red", !settled && redToMove);
   $("turn-indicator").classList.toggle("red", !settled && redToMove);
-  $("review").max = history.length;
-  $("review").value = cursor;
-  $("move-number").textContent = cursor ? `Move ${cursor}/${history.length}` : "Start";
+  drawMarginTimeline();
   $("back").disabled = !cursor;
   $("forward").disabled = cursor >= history.length;
   $("moves").value = [...starts, ...history].map(cellName).join(" ");
@@ -423,6 +496,8 @@ function refreshPosition() {
 
 function newGame() {
   if (!engine) return;
+  cancelTimelineGesture();
+  marginHistory.clear();
   cancelSearch();
   history = []; cursor = 0;
   setupRed = null;
@@ -478,6 +553,8 @@ function loadPosition() {
     catch (error) { replay(starts[0], starts[1], history, cursor); throw error; }
     cancelSearch();
     setupPhase = 0; setupRed = null;
+    cancelTimelineGesture();
+    marginHistory.clear();
     starts = [red, white]; history = moves; cursor = moves.length;
     refreshPosition();
   } catch (error) { $("position-error").textContent = error.message; }
@@ -493,9 +570,12 @@ function playMove(move) {
 }
 
 function reviewAt(next) {
-  if (!engine || setupPhase) return;
+  if (!engine || setupPhase || !Number.isFinite(next)) return;
+  next = Math.max(0, Math.min(history.length, Math.round(next)));
+  if (next === cursor) return;
+  timelineHoverIndex = null;
   cancelSearch();
-  cursor = Math.max(0, Math.min(history.length, next));
+  cursor = next;
   replay(starts[0], starts[1], history, cursor);
   refreshPosition();
 }
@@ -526,7 +606,7 @@ board.addEventListener("pointerleave", event => {
 });
 
 board.addEventListener("pointerdown", event => {
-  if (!["mouse", "touch", "pen"].includes(event.pointerType) || event.isPrimary === false || movePressActive() || (event.button !== undefined && event.button !== 0)) return;
+  if (!["mouse", "touch", "pen"].includes(event.pointerType) || event.isPrimary === false || movePressActive() || timelineGesture || (event.button !== undefined && event.button !== 0)) return;
   const hex = event.target.closest(".hex.legal");
   if (!hex) return;
   event.preventDefault();
@@ -564,7 +644,7 @@ board.addEventListener("pointermove", event => {
 // Safari may also deliver native touch events during a pointer gesture.
 // Suppress native panning only during a board or candidate inspection gesture.
 document.addEventListener("touchmove", event => {
-  const gesture = boardGesture || rowGesture;
+  const gesture = boardGesture || rowGesture || timelineGesture;
   if (event.cancelable && gesture && gesture.pointerType !== "mouse") event.preventDefault();
 }, {passive: false, capture: true});
 
@@ -699,7 +779,7 @@ function updateRowAutoScroll(gesture) {
 }
 
 $("candidates").addEventListener("pointerdown", event => {
-  if (!["mouse", "touch", "pen"].includes(event.pointerType) || event.isPrimary === false || movePressActive() || (event.button !== undefined && event.button !== 0)) return;
+  if (!["mouse", "touch", "pen"].includes(event.pointerType) || event.isPrimary === false || movePressActive() || timelineGesture || (event.button !== undefined && event.button !== 0)) return;
   const row = event.target.closest("tr[data-move]");
   if (!row || !result || !result.candidates.some(candidate => candidate.move === +row.dataset.move)) return;
   suppressRowClickUntil = 0;
@@ -790,7 +870,76 @@ $("copy").addEventListener("click", async () => {
 });
 $("back").addEventListener("click", () => reviewAt(cursor - 1));
 $("forward").addEventListener("click", () => reviewAt(cursor + 1));
+// Keep the input adapter alongside pointer/keyboard navigation for accessibility.
 $("review").addEventListener("input", () => reviewAt(+$("review").value));
+
+function reviewIndexAt(event) {
+  const bounds = $("review").getBoundingClientRect();
+  if (!(bounds.width > 0) || !Number.isFinite(event.clientX)) return cursor;
+  const fraction = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+  return Math.min(history.length, Math.floor(fraction * (history.length + 1)));
+}
+
+function cancelTimelineGesture() {
+  const gesture = timelineGesture;
+  timelineGesture = null; timelineHoverIndex = null;
+  if (!gesture) return;
+  suppressTimelineClickUntil = performance.now() + 800;
+  if ($("review").hasPointerCapture(gesture.pointerId)) $("review").releasePointerCapture(gesture.pointerId);
+}
+
+$("review").addEventListener("pointerdown", event => {
+  if (!engine || setupPhase || movePressActive() || timelineGesture || event.isPrimary === false ||
+      !["mouse", "touch", "pen"].includes(event.pointerType) || (event.button !== undefined && event.button !== 0)) return;
+  event.preventDefault();
+  timelineHoverIndex = null;
+  timelineGesture = {pointerId: event.pointerId, pointerType: event.pointerType};
+  $("review").setPointerCapture(event.pointerId);
+  reviewAt(reviewIndexAt(event));
+  updateTimelineLabel();
+});
+$("review").addEventListener("pointermove", event => {
+  if (timelineGesture && timelineGesture.pointerId === event.pointerId) {
+    event.preventDefault();
+    reviewAt(reviewIndexAt(event));
+    updateTimelineLabel();
+  } else if (!timelineGesture && event.pointerType === "mouse" && !setupPhase) {
+    timelineHoverIndex = reviewIndexAt(event);
+    updateTimelineLabel(timelineHoverIndex);
+  }
+});
+function finishTimelineGesture(event) {
+  if (!timelineGesture || timelineGesture.pointerId !== event.pointerId) return;
+  event.preventDefault();
+  cancelTimelineGesture();
+  updateTimelineLabel();
+}
+$("review").addEventListener("pointerup", finishTimelineGesture);
+$("review").addEventListener("pointercancel", finishTimelineGesture);
+$("review").addEventListener("lostpointercapture", event => {
+  if (!timelineGesture || timelineGesture.pointerId !== event.pointerId) return;
+  cancelTimelineGesture();
+  updateTimelineLabel();
+});
+$("review").addEventListener("pointerleave", () => {
+  if (!timelineGesture) { timelineHoverIndex = null; updateTimelineLabel(); }
+});
+$("review").addEventListener("click", event => {
+  if (performance.now() < suppressTimelineClickUntil || event.pointerType === "touch" || event.pointerType === "pen") {
+    event.preventDefault(); suppressTimelineClickUntil = 0; return;
+  }
+  reviewAt(reviewIndexAt(event));
+});
+$("review").addEventListener("keydown", event => {
+  const targets = {ArrowLeft: cursor - 1, ArrowDown: cursor - 1,
+    ArrowRight: cursor + 1, ArrowUp: cursor + 1, Home: 0, End: history.length};
+  if (!(event.key in targets)) return;
+  event.preventDefault();
+  timelineHoverIndex = null;
+  reviewAt(targets[event.key]);
+  updateTimelineLabel();
+});
+$("review").addEventListener("contextmenu", event => event.preventDefault());
 
 HN().then(module => {
   engine = module;

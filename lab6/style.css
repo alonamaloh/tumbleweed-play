@@ -16,7 +16,7 @@ main { max-width: 1220px; margin: auto; display: grid; grid-template-columns: mi
 .board-surface { position: relative; padding-top: 6px; touch-action: none; }
 .preview-context { position: absolute; top: 0; left: 0; right: 0; min-height: 20px; font-size: 12px; font-weight: 600; color: var(--muted); pointer-events: none; }
 .preview-context[hidden] { display: none; }
-#board { width: 100%; max-height: 68vh; display: block; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+#board { width: 100%; max-height: 68vh; max-height: max(240px, min(68vh, calc(100dvh - 310px))); display: block; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .hex { stroke: #afa993; stroke-width: 1; cursor: default; }
 .hex.legal { cursor: pointer; }
 .hex.legal:hover { stroke: #00e676; stroke-width: 3; }
@@ -40,9 +40,15 @@ main { max-width: 1220px; margin: auto; display: grid; grid-template-columns: mi
 .small { color: var(--muted); font-size: 12px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
 .board-panel > p { max-width: 520px; margin: 6px auto; }
-.review { margin: 20px auto 0; display: flex; gap: 10px; align-items: center; }
-.review input { flex: 1; min-width: 30px; accent-color: var(--green); }
-#move-number { min-width: 65px; font-size: 12px; }
+.review { margin: 16px auto 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 8px; align-items: center; }
+#review { display: block; width: 100%; min-width: 30px; height: 32px; background: #dadbd3; border: 1px solid #929a8a; border-radius: 5px; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+#review:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+#review[aria-disabled="true"] { opacity: .45; cursor: default; }
+.margin-segment { shape-rendering: crispEdges; }
+.margin-missing { fill: #dadbd3; }
+.margin-current { fill: none; stroke: #00e676; stroke-width: 3px; vector-effect: non-scaling-stroke; pointer-events: none; }
+.margin-timeline-outline { fill: none; stroke: #929a8a; stroke-width: 1px; vector-effect: non-scaling-stroke; pointer-events: none; }
+#move-number { grid-column: 2; min-width: 65px; font-size: 12px; line-height: 16px; text-align: center; }
 .card { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; }
 h2 { font-size: 15px; font-weight: 650; margin: 0 0 10px; }
 .card p { margin: 8px 0; }
