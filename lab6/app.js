@@ -598,7 +598,9 @@ board.addEventListener("click", event => {
 });
 $("candidates").addEventListener("pointerover", event => {
   const row = event.target.closest("tr[data-move]");
-  if (setupPhase || movePressActive() || !row || row === hoverRow || event.pointerType === "touch" || event.pointerType === "pen") return;
+  if (setupPhase || movePressActive() || !row || event.pointerType === "touch" || event.pointerType === "pen") return;
+  $("candidates").classList.toggle("mouse-hover", true);
+  if (row === hoverRow) return;
   hoverRow = row; hoverMove = +row.dataset.move; drawBoard();
 });
 $("candidates").addEventListener("pointerleave", () => {
@@ -702,6 +704,9 @@ $("candidates").addEventListener("pointerdown", event => {
   if (!row || !result || !result.candidates.some(candidate => candidate.move === +row.dataset.move)) return;
   suppressRowClickUntil = 0;
   if (event.pointerType !== "mouse") event.preventDefault();
+  // Captured touch pointers can leave native :hover stuck on the original row.
+  // Only actual mouse use enables it; touch/pen highlighting follows previewRow.
+  $("candidates").classList.toggle("mouse-hover", event.pointerType === "mouse");
   rowGesture = {pointerId: event.pointerId, pointerType: event.pointerType,
     move: +row.dataset.move, row, previewMove: +row.dataset.move, previewRow: row,
     clientX: event.clientX, clientY: event.clientY, scrollFrame: null,
@@ -713,6 +718,8 @@ $("candidates").addEventListener("pointerdown", event => {
 });
 
 $("candidates").addEventListener("pointermove", event => {
+  if (event.pointerType === "mouse" && !movePressActive() && event.target.closest("tr[data-move]"))
+    $("candidates").classList.toggle("mouse-hover", true);
   if (!rowGesture || event.pointerId !== rowGesture.pointerId) return;
   const gesture = rowGesture;
   if (!insidePressedRow(event)) gesture.cancelled = true;
