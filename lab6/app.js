@@ -57,7 +57,7 @@ function positionKey() {
   return historyPositionKey(cursor);
 }
 
-function reportMargin(data) {
+function ownershipMargin(data) {
   if (!data || !(data.samples > 0) || !data.ownership) return null;
   let margin = 0;
   for (const cell of cells) {
@@ -65,6 +65,16 @@ function reportMargin(data) {
     margin += data.ownership[cell];
   }
   return margin; // Ownership reports are already Red-relative, even on White's turn.
+}
+
+function reportMargin(data) {
+  const mean = ownershipMargin(data);
+  if (!Number.isFinite(mean)) return null;
+  const best = (data.candidates || []).find(candidate => candidate.move === data.best &&
+    valid(candidate.move) && candidate.visits > 0 && Number.isFinite(candidate.margin));
+  if (!best || (data.side !== 1 && data.side !== 2)) return mean;
+  const bestRedMargin = best.margin * (data.side === 1 ? 1 : -1);
+  return (mean + bestRedMargin) / 2;
 }
 
 function rememberTimelineMargin(key, margin) {
@@ -304,8 +314,35 @@ function previewCandidate() {
 
 function movePressActive() { return !!boardGesture || !!rowGesture; }
 
+function updateMarginMarker() {
+  if (!engine || setupPhase) {
+    $("ownership-marker-value").textContent = "";
+    return "";
+  }
+  const retainedMargin = timelineMarginAt(cursor);
+  // Cached maps use Float32 storage; retain the graph's original scalar precision.
+  const searchedMargin = result && result.type === "cached" && Number.isFinite(retainedMargin)
+    ? retainedMargin : reportMargin(result);
+  const settled = !!engine._hn_score(2);
+  const margin = settled ? engine._hn_score(0) - engine._hn_score(1)
+    : Number.isFinite(searchedMargin) ? searchedMargin : Number.isFinite(retainedMargin)
+      ? retainedMargin : engine._hn_eval_margin() * (engine._hn_stm() === 1 ? 1 : -1);
+  const position = Math.max(0, Math.min(100, (margin / cells.length + 1) * 50));
+  $("ownership-marker").style.left = `${position}%`;
+  $("ownership-marker-value").style.left = `${position}%`;
+  $("ownership-marker-value").textContent = signed(margin);
+  const source = settled ? "final margin" : Number.isFinite(searchedMargin)
+    ? "blended search estimate" : Number.isFinite(retainedMargin) ? "retained search estimate" : "static ownership estimate";
+  const label = `Red ${signed(margin)} cells · ${source}.`;
+  $("ownership-legend").title = label;
+  $("ownership-legend").setAttribute("aria-label", label);
+  return label;
+}
+
 function drawBoard(force = false) {
   if (!engine) return;
+  // Only board structure freezes during a press; the marker stays with the graph.
+  const legendLabel = updateMarginMarker();
   if (movePressActive() && !force) return;
   const placing = setupPhase !== 0;
   const preview = placing ? null : previewCandidate();
@@ -418,15 +455,6 @@ function drawBoard(force = false) {
     return;
   }
   const mapMargin = map ? cells.reduce((sum, c) => sum + (Number.isFinite(map[c]) ? map[c] : 0), 0) : null;
-  const legendMargin = mapMargin === null ? engine._hn_eval_margin() * (engine._hn_stm() === 1 ? 1 : -1) : mapMargin;
-  const markerPosition = Math.max(0, Math.min(100, (legendMargin / cells.length + 1) * 50));
-  $("ownership-marker").style.left = `${markerPosition}%`;
-  $("ownership-marker-value").style.left = `${markerPosition}%`;
-  $("ownership-marker-value").textContent = signed(legendMargin);
-  const legendSource = ownershipPreview ? `after ${cellName(preview.move)}` : result ? "all searched lines" : "static ownership estimate";
-  const legendLabel = `Red ${signed(legendMargin)} cells · ${legendSource}.`;
-  $("ownership-legend").title = legendLabel;
-  $("ownership-legend").setAttribute("aria-label", legendLabel);
   if (boardGesture && view === "ownership" && !boardGesture.cancelled && !preview) $("map-caption").textContent = `No searched ownership yet for ${cellName(boardGesture.cell)}. Release to play; slide outside to cancel.`;
   else if (replyPreview) $("map-caption").textContent = context.textContent;
   else if (ownershipPreview) $("map-caption").textContent = `After ${cellName(preview.move)} · expected margin ${signed(mapMargin)} for Red · ${preview.samples.toLocaleString()} leaf predictions${boardGesture && !boardGesture.cancelled ? " · release to play" : ""}.`;
