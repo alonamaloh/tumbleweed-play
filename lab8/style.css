@@ -26,7 +26,7 @@ main { max-width: 1220px; margin: auto; display: grid; grid-template-columns: mi
 .legend { display: flex; gap: 8px; align-items: center; justify-content: center; margin: 6px 0; }
 .legend[hidden] { display: none; }
 #ownership-legend-row { margin-top: 20px; }
-.gradient { position: relative; width: 150px; height: 9px; background: linear-gradient(90deg, #fff, #000, #ba4238); border-radius: 5px; }
+.gradient { position: relative; width: 150px; height: 9px; background: linear-gradient(90deg, #f2eee5, #736f65, #d09081); border-radius: 5px; }
 #ownership-marker { position: absolute; left: 50%; top: -8px; transform: translateX(-50%); width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 6px solid #37423a; pointer-events: none; }
 #ownership-marker-value { position: absolute; left: 50%; top: -25px; transform: translateX(-50%); color: #37423a; font-size: 11px; font-weight: 600; line-height: 14px; white-space: nowrap; text-align: center; pointer-events: none; }
 .white-swatch, .red-swatch { width: 8px; height: 8px; border-radius: 50%; background: var(--white); }

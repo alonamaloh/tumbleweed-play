@@ -2,13 +2,14 @@
 
 // Each short WASM slice returns to the worker event loop. Position changes and
 // Stop can therefore cancel a search without destroying a loaded engine.
-importScripts("config.js", "hn.js");
+importScripts("config.js", "hn.js?v=20261002-24");
 let engine = null;
 let active = null;
 let pending = null;
 let timer = null;
 let lastReport = 0;
 let runningSlice = false;
+let position = null;
 
 function rootSnapshot() {
   const m = engine;
@@ -41,7 +42,7 @@ function rootSnapshot() {
     stdev.push(m._hn_ownership_stdev(cell));
   }
   return {gen: active.gen, type: "progress", side: m._hn_stm(), best: m._hn_search_best(),
-    visits: m._hn_last(1), ms: m._hn_last(2), depth: m._hn_last(0),
+    visits: m._hn_last(1), inheritedVisits: m._hn_last(6), ms: m._hn_last(2), depth: m._hn_last(0),
     capacityReached: !!m._hn_last(5),
     samples: m._hn_ownership_samples(), candidates, ownership, stdev};
 }
@@ -54,17 +55,24 @@ function beginPending() {
   active = pending;
   pending = null;
   try {
-    engine._hn_init_search(active.red, active.white, ANALYSIS_CONFIG.treeMemoryMiB);
-    for (const move of active.moves) {
+    // Only an exact forward extension refers to descendants of this tree.
+    // Review backwards, different starts and sibling branches rebuild safely.
+    const forward = position && position.red === active.red && position.white === active.white &&
+      position.moves.length <= active.moves.length && position.moves.every((move, index) => move === active.moves[index]);
+    if (!forward) engine._hn_init_search(active.red, active.white, ANALYSIS_CONFIG.treeMemoryMiB);
+    for (const move of active.moves.slice(forward ? position.moves.length : 0)) {
       if (move < 0) engine._hn_pass();
       else if (!engine._hn_play(move)) throw new Error("Illegal move in search position.");
     }
-    engine._hn_search_start(active.sims > 0 ? active.sims : ANALYSIS_CONFIG.searchSims);
+    position = {red: active.red, white: active.white, moves: active.moves.slice()};
+    active.searchStarted = !!engine._hn_search_start(active.sims > 0 ? active.sims : ANALYSIS_CONFIG.searchSims);
+    active.reportInherited = engine._hn_last(6) > 0;
     lastReport = 0;
     timer = setTimeout(step, 0);
   } catch (error) {
     postMessage({type: "error", gen: active.gen, message: String(error.message || error)});
     active = null;
+    position = null;
   }
 }
 
@@ -74,6 +82,16 @@ function step() {
   const job = active;
   runningSlice = true;
   try {
+    // Publish retained analysis before doing new work, but only on the
+    // scheduled turn so a newer queued position can supersede this job.
+    if (job.reportInherited) {
+      job.reportInherited = false;
+      const snapshot = rootSnapshot();
+      if (!job.searchStarted) snapshot.type = "done";
+      postMessage(snapshot);
+      lastReport = performance.now();
+      if (!job.searchStarted) { active = null; return; }
+    }
     const more = engine._hn_search_step(256, 25);
     const now = performance.now();
     if (!more || now - lastReport >= 120) {
@@ -87,6 +105,7 @@ function step() {
   } catch (error) {
     postMessage({type: "error", gen: job.gen, message: String(error.message || error)});
     active = null;
+    position = null;
   } finally {
     runningSlice = false;
     if (pending) beginPending();

@@ -36,6 +36,7 @@ let cursor = 0;
 let generation = 0;
 let searching = false;
 let result = null;
+let carriedOwnership = null; // Display-only conditional map for the position just played.
 let candidateSort = "visits";
 let renderedCandidateMoves = [];
 let view = "normal";
@@ -291,7 +292,9 @@ function ownershipColor(value) {
   if (!Number.isFinite(value)) return "#e5ddca";
   const amount = Math.min(1, Math.abs(value));
   const end = value >= 0 ? [186, 66, 56] : [255, 255, 255];
-  return "rgb(" + end.map(channel => Math.round(channel * amount)).join(",") + ")";
+  // Blend only the background, so even fully owned cells differ from stacks.
+  const background = [229, 221, 202];
+  return "rgb(" + end.map((channel, k) => Math.round((background[k] + channel * amount) / 2)).join(",") + ")";
 }
 
 function marginLossColor(loss) {
@@ -350,10 +353,11 @@ function drawBoard(force = false) {
   // Only board structure freezes during a press; the marker stays with the graph.
   const legendLabel = updateMarginMarker();
   const placing = setupPhase !== 0;
+  const settled = !placing && !!engine._hn_score(2);
   $("ownership-legend-row").hidden = placing || view !== "ownership";
-  $("margin-loss-legend").hidden = placing || view !== "margin";
+  $("margin-loss-legend").hidden = placing || settled || view !== "margin";
   if (movePressActive() && !force) return;
-  const preview = placing ? null : previewCandidate();
+  const preview = placing || settled ? null : previewCandidate();
   const selectedMove = previewMove();
   // The prospective stack is known before any search statistics arrive.
   // Preview it read-only without claiming an unsearched conditional map.
@@ -363,10 +367,21 @@ function drawBoard(force = false) {
   const replyPreview = preview && (view === "visits" || view === "margin");
   // The dashed hint is the root-list Space action, not an opponent's reply.
   const highlightedMove = !placing && !replyPreview ? firstListedMove() : null;
-  const map = placing ? null : ownershipPreview ? preview.ownership : result && result.ownership;
   const ownershipOn = !placing && (!!ownershipPreview || view === "ownership");
+  // Preserve the played move's preview until genuine new-root samples arrive.
+  // It is display-only: inherited visits without samples must not replace it
+  // with a static NNUE map or turn it into a cached/search/graph observation.
+  const carriedMap = carriedOwnership && carriedOwnership.key === positionKey()
+    && !(result && result.samples > 0) ? carriedOwnership.ownership : null;
+  // Without a previous conditional map, use the display engine's already
+  // evaluated Red-relative root prediction before any search report exists.
+  const map = placing || settled ? null : ownershipPreview ? preview.ownership
+    : carriedMap || result && result.ownership || ownershipOn && cells.reduce((values, cell) => {
+      values[cell] = engine._hn_ownership(cell);
+      return values;
+    }, []);
   const marginOn = !placing && view === "margin" && !ownershipPreview;
-  const displayedCandidates = placing ? [] : replyPreview ? preview.replyState === 1 ? preview.replies || [] : [] : result ? result.candidates : [];
+  const displayedCandidates = placing || settled ? [] : replyPreview ? preview.replyState === 1 ? preview.replies || [] : [] : result ? result.candidates : [];
   const displayedBest = placing ? null : replyPreview ? preview.replyBest : result && result.best;
   const rootSide = result ? result.side : engine._hn_stm();
   const displayedSide = replyPreview ? 3 - rootSide : rootSide;
@@ -389,7 +404,7 @@ function drawBoard(force = false) {
     }
     context.textContent = text;
   }
-  let svg = "";
+  let svg = "", mapMargin = map ? 0 : null;
   for (const cell of cells) {
     const [x, y] = xy(cell);
     const ghost = cell === ghostMove;
@@ -407,9 +422,19 @@ function drawBoard(force = false) {
     const marginCandidate = ghost ? preview : candidate;
     const moveMargin = marginOn && (ghost || replyPreview || legal) && marginCandidate && marginCandidate.visits > 0 && Number.isFinite(marginCandidate.margin)
       ? marginCandidate.margin : null;
-    const fill = Number.isFinite(loss) ? marginLossColor(loss) : ownershipOn && map ? ownershipColor(map[cell]) : territory === 1 ? "#f0d5d0" : territory === 2 ? "#dae1e3" : "#e5ddca";
+    const ownership = settled
+      ? territory === 1 ? 1 : territory === 2 ? -1 : NaN
+      : ownershipOn && territory === 1 ? 1 : ownershipOn && territory === 2 ? -1
+      : map && map[cell];
+    if (map && Number.isFinite(ownership)) mapMargin += ownership;
+    const fill = settled ? ownershipColor(ownership)
+      : Number.isFinite(loss) ? marginLossColor(loss)
+      : ownershipOn && map ? ownershipColor(ownership)
+      : territory === 1 ? ownershipColor(1) : territory === 2 ? ownershipColor(-1) : "#e5ddca";
     let title = cellName(cell);
-    if (marginOn) {
+    if (settled) {
+      title = Number.isFinite(ownership) ? `${((ownership + 1) * 50).toFixed(1)}%` : "";
+    } else if (marginOn) {
       title = Number.isFinite(moveMargin) ? signed(moveMargin) : "";
     } else if (!placing && view === "visits" && !ownershipPreview) {
       const tooltipCandidate = ghost ? preview : candidate;
@@ -417,9 +442,9 @@ function drawBoard(force = false) {
       title = tooltipCandidate && Number.isFinite(tooltipCandidate.visits) && tooltipCandidate.visits >= 0 && tooltipTotal > 0
         ? `${(100 * tooltipCandidate.visits / tooltipTotal).toFixed(1)}%` : "";
     } else if (ownershipOn) {
-      title = map && Number.isFinite(map[cell]) ? `${((map[cell] + 1) * 50).toFixed(1)}%` : "";
+      title = Number.isFinite(ownership) ? `${((ownership + 1) * 50).toFixed(1)}%` : "";
     }
-    const numericTooltip = !placing && (marginOn || view === "visits" || ownershipOn);
+    const numericTooltip = !placing && (settled || marginOn || view === "visits" || ownershipOn);
     const accessibleLabel = numericTooltip ? ` aria-label="${cellName(cell)}${title ? " " + title : ""}"` : "";
     svg += `<path class="hex${legal ? " legal" : ""}" data-cell="${cell}"${accessibleLabel} d="${hexPath(x, y)}" fill="${fill}">${title ? `<title>${title}</title>` : ""}</path>`;
     if (own) {
@@ -462,18 +487,19 @@ function drawBoard(force = false) {
     updatePreviewLine();
     return;
   }
-  const mapMargin = map ? cells.reduce((sum, c) => sum + (Number.isFinite(map[c]) ? map[c] : 0), 0) : null;
-  if (boardGesture && view === "ownership" && !boardGesture.cancelled && !preview) $("map-caption").textContent = `No searched ownership yet for ${cellName(boardGesture.cell)}. Release to play; slide outside to cancel.`;
+  if (settled) $("map-caption").textContent = legendLabel;
+  else if (boardGesture && view === "ownership" && !boardGesture.cancelled && !preview) $("map-caption").textContent = `No searched ownership yet for ${cellName(boardGesture.cell)}. Release to play; slide outside to cancel.`;
   else if (replyPreview) $("map-caption").textContent = context.textContent;
   else if (ownershipPreview) $("map-caption").textContent = `After ${cellName(preview.move)} · expected margin ${signed(mapMargin)} for Red · ${preview.samples.toLocaleString()} leaf predictions${boardGesture && !boardGesture.cancelled ? " · release to play" : ""}.`;
-  else if (view === "ownership") $("map-caption").textContent = result && result.samples ? `All searched lines · Red ${signed(mapMargin)} cells · ${result.samples.toLocaleString()} leaf predictions.` : legendLabel;
+  else if (view === "ownership") $("map-caption").textContent = result && result.samples ? `All searched lines · Red ${signed(mapMargin)} cells · ${result.samples.toLocaleString()} leaf predictions.`
+    : carriedMap ? `Previous search’s preview · Red ${signed(mapMargin)} cells.` : legendLabel;
   else if (marginOn) $("map-caption").textContent = result ? `Margins for ${displayedSide === 1 ? "Red" : "White"}${hasBaseline ? `; colors show loss relative to ${cellName(displayedBest)}` : ""}.` : "No searched margins yet.";
   else $("map-caption").textContent = legendLabel;
   updatePreviewLine();
 }
 
 function updatePreviewLine() {
-  if (setupPhase) {
+  if (setupPhase || engine && engine._hn_score(2)) {
     $("candidate-pv").hidden = true;
     $("candidate-pv").textContent = "";
     return;
@@ -606,6 +632,7 @@ function renderCandidates(candidates, total, best, hasBaseline) {
 
 function showResult(data) {
   result = data;
+  if (data.samples > 0) carriedOwnership = null;
   const total = data.candidates.reduce((sum, c) => sum + c.visits, 0);
   const candidates = sortedCandidates(data);
   if (stableBest !== data.best) { stableBest = data.best; stableSince = data.visits; }
@@ -634,7 +661,7 @@ function cancelSearch(clear = true) {
       if ($("candidates").hasPointerCapture(pressedRow.pointerId)) $("candidates").releasePointerCapture(pressedRow.pointerId);
     }
     clearCandidateRowHover();
-    result = null; hoverMove = null; hoverRow = null; stableBest = null;
+    result = null; carriedOwnership = null; hoverMove = null; hoverRow = null; stableBest = null;
     cancelCandidateRowAnimations();
     $("candidates").innerHTML = "";
     renderedCandidateMoves = [];
@@ -647,7 +674,9 @@ function cancelSearch(clear = true) {
 
 function startSearch() {
   if (!engine || !workerReady || setupPhase) return;
+  const initialOwnership = carriedOwnership && carriedOwnership.key === positionKey() ? carriedOwnership : null;
   cancelSearch();
+  carriedOwnership = initialOwnership;
   $("analysis-error").textContent = "";
   if (engine._hn_score(2)) { drawBoard(); return; }
   searching = true;
@@ -774,10 +803,16 @@ function loadPosition() {
 
 function playMove(move) {
   if (!engine || setupPhase || move < 0 || !engine._hn_play(move)) return;
+  // Look up the move actually played, independent of the hover or table sort.
+  // Reports are Red-relative even when this advance changes the player to move.
+  const candidate = result && result.candidates.find(candidate => candidate.move === move);
+  const ownership = candidate && candidate.samples > 0 && candidate.ownership
+    && cells.some(cell => Number.isFinite(candidate.ownership[cell])) ? candidate.ownership.slice() : null;
   cancelSearch();
   history = history.slice(0, cursor);
   history.push(move); cursor++;
   if (!engine._hn_score(2) && !engine._hn_can_move()) { engine._hn_pass(); history.push(-1); cursor++; }
+  if (ownership) carriedOwnership = {key: positionKey(), ownership};
   refreshPosition();
 }
 
@@ -1211,7 +1246,7 @@ document.addEventListener("keydown", event => {
 HN().then(module => {
   engine = module;
   for (const id of ["load", "newgame", "copy"]) $(id).disabled = false;
-  worker = new Worker("search-worker.js");
+  worker = new Worker("search-worker.js?v=20261002-24");
   worker.onmessage = event => {
     const data = event.data;
     if (data.type === "ready") {
