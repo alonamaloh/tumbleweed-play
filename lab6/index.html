@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>HighNoon — Lab 6</title>
-  <link rel="stylesheet" href="style.css?v=20261002-24">
+  <title>HighNoon</title>
+  <link rel="stylesheet" href="style.css?v=20261002-30">
 </head>
 <body>
   <header>
-    <div><h1>HighNoon analysis</h1><p>Size <span id="board-size">6</span> · MCTS · <span id="model-name">mOV48</span></p></div>
-    <span id="lab-name" class="lab-tag">Lab 6</span>
+    <div><h1>HighNoon</h1><p>Size <span id="board-size">6</span></p></div>
+    <select id="playmode" aria-label="Play mode"><option value="analysis">Analysis</option><option value="red">HighNoon is red</option><option value="white">HighNoon is white</option></select>
   </header>
   <main>
     <section class="board-panel" aria-label="Game board">
@@ -37,16 +37,15 @@
             <thead><tr>
               <th scope="col">Move</th>
               <th id="visits-heading" scope="colgroup" colspan="2" aria-sort="descending">
-                <button id="sort-visits" class="candidate-sort" type="button" data-candidate-sort="visits" aria-pressed="true">Visits<span class="sort-indicator" aria-hidden="true"></span></button>
+                Visits<span class="sort-indicator" aria-hidden="true"></span>
               </th>
               <th id="margin-heading" scope="col" aria-sort="none">
-                <button id="sort-margin" class="candidate-sort" type="button" data-candidate-sort="margin" aria-pressed="false">Margin<span class="sort-indicator" aria-hidden="true"></span></button>
+                Margin
               </th>
             </tr></thead>
             <tbody id="candidates"></tbody>
           </table>
         </div>
-        <p id="candidate-pv" class="small" hidden></p>
       </section>
       <section class="card position">
         <textarea id="moves" rows="3" spellcheck="false" aria-label="Move list" placeholder="A1 H5 …"></textarea>
@@ -64,7 +63,7 @@
     </aside>
   </main>
   <script src="config.js"></script>
-  <script src="hn.js?v=20261002-24"></script>
-<script src="app.js?v=20261002-24"></script>
+  <script src="hn.js?v=20261002-30"></script>
+  <script src="app.js?v=20261002-30"></script>
 </body>
 </html>

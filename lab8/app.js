@@ -35,9 +35,12 @@ let history = [];
 let cursor = 0;
 let generation = 0;
 let searching = false;
+let computerMoveTimer = null;
+let moveAudio = null;
+let moveAudioUnlock = null;
+let thudNoise = null;
 let result = null;
 let carriedOwnership = null; // Display-only conditional map for the position just played.
-let candidateSort = "visits";
 let renderedCandidateMoves = [];
 let view = "normal";
 let hoverMove = null;
@@ -63,6 +66,74 @@ function positionKey() {
   if (setupPhase) return JSON.stringify([SIDE, "setup", setupPhase, setupRed]);
   return historyPositionKey(cursor);
 }
+
+function gameText() {
+  return [...starts, ...history].map(cellName).join(" ");
+}
+
+function prepareMoveSound(event) {
+  if (event && event.isTrusted === false) return;
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!moveAudio && AudioContext) moveAudio = new AudioContext();
+    if (moveAudio && moveAudio.state === "suspended") {
+      const resumed = moveAudio.resume();
+      if (resumed && typeof resumed.catch === "function") moveAudioUnlock = resumed.catch(() => {});
+    }
+  } catch { /* Sound must never prevent a move. */ }
+}
+
+function playMoveSound(delay = 0) {
+  const audio = moveAudio;
+  // A first gesture can finish resuming audio just after the move handler.
+  // Allow that brief delay, but never replay old moves when audio unlocks later.
+  if (!audio) return;
+  if (audio.state !== "running") {
+    if (audio.state === "suspended" && moveAudioUnlock) {
+      const requestedAt = performance.now();
+      moveAudioUnlock.then(() => {
+        if (audio === moveAudio && audio.state === "running" && performance.now() - requestedAt < 150)
+          playMoveSound(delay);
+      });
+    }
+    return;
+  }
+  try {
+    if (!thudNoise) {
+      thudNoise = audio.createBuffer(1, Math.ceil(audio.sampleRate * .035), audio.sampleRate);
+      const samples = thudNoise.getChannelData(0);
+      // A fixed noise texture avoids affecting the opening selector's random stream.
+      let seed = 0x48534e;
+      for (let k = 0; k < samples.length; k++) {
+        seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+        samples[k] = (seed >>> 0) / 2147483648 - 1;
+      }
+    }
+    const now = audio.currentTime + delay;
+    const bass = audio.createOscillator(), bassGain = audio.createGain();
+    bass.type = "sine";
+    bass.frequency.setValueAtTime(150, now);
+    bass.frequency.exponentialRampToValueAtTime(65, now + .045);
+    bassGain.gain.setValueAtTime(.0001, now);
+    bassGain.gain.linearRampToValueAtTime(.14, now + .005);
+    bassGain.gain.exponentialRampToValueAtTime(.0001, now + .13);
+    bass.connect(bassGain); bassGain.connect(audio.destination);
+    bass.onended = () => { bass.disconnect(); bassGain.disconnect(); };
+    bass.start(now); bass.stop(now + .14);
+
+    const tap = audio.createBufferSource(), filter = audio.createBiquadFilter(), tapGain = audio.createGain();
+    tap.buffer = thudNoise;
+    filter.type = "lowpass"; filter.frequency.value = 800; filter.Q.value = .6;
+    tapGain.gain.setValueAtTime(.055, now);
+    tapGain.gain.exponentialRampToValueAtTime(.0001, now + .03);
+    tap.connect(filter); filter.connect(tapGain); tapGain.connect(audio.destination);
+    tap.onended = () => { tap.disconnect(); filter.disconnect(); tapGain.disconnect(); };
+    tap.start(now); tap.stop(now + .035);
+  } catch { /* Missing or interrupted audio is a silent fallback. */ }
+}
+
+for (const event of ["pointerdown", "pointerup", "click", "keydown"])
+  document.addEventListener(event, prepareMoveSound, {capture: true});
 
 function ownershipMargin(data) {
   if (!data || !(data.samples > 0) || !data.ownership) return null;
@@ -231,12 +302,11 @@ function getCachedResult(key) {
 }
 
 $("board-size").textContent = SIDE;
-$("model-name").textContent = ANALYSIS_CONFIG.model;
-$("lab-name").textContent = `Lab ${SIDE}`;
-document.title = `HighNoon — Lab ${SIDE}`;
+$("playmode").value = "analysis";
+document.title = "HighNoon";
 // Fit the board and its coordinate labels closely instead of scaling a large
 // invisible border along with every cell.
-board.setAttribute("viewBox", SIDE === 6 ? "10 20 580 512" : "18 26 564 503");
+board.setAttribute("viewBox", SIDE === 6 ? "10 20 580 513" : "18 26 564 503");
 
 function parseCell(text) {
   if (/^(pass|-)$/i.test(text)) return -1;
@@ -455,7 +525,7 @@ function drawBoard(force = false) {
       svg += `<text class="stack-number" x="${x}" y="${y}" fill="${own === 2 ? "#454b49" : "#fff"}">${height}</text>`;
     }
     if (territory === 1 || territory === 2) svg += `<g class="territory-lock" data-lock-cell="${cell}" pointer-events="none" transform="translate(${x - radius * .52},${y + radius * .28})"><path d="M-2,-1v-2a2,2 0 0 1 4,0v2" fill="none" stroke="#575e53" stroke-width="1.3"/><rect x="-3" y="-1" width="6" height="5" rx="1" fill="${territory === 1 ? "#ba4238" : "#fffefa"}" stroke="#575e53" stroke-width=".9"/></g>`;
-    if (cursor && cell === history[cursor - 1]) svg += `<path d="${hexPath(x, y)}" fill="none" stroke="#bb853d" stroke-width="3" pointer-events="none"/>`;
+    if (cursor && cell === history[cursor - 1]) svg += `<path class="last-move" data-last-move="${cell}" d="${hexPath(x, y)}" fill="none" stroke="#ff8c00" stroke-width="3" pointer-events="none"/>`;
     if (ghost) svg += `<path d="${hexPath(x, y)}" fill="none" stroke="#00e676" stroke-width="4" pointer-events="none"/>`;
     else if (cell === highlightedMove) svg += `<path class="candidate-recommendation" data-recommended-move="${cell}" d="${hexPath(x, y)}" fill="none" stroke="#00e676" stroke-width="3" stroke-dasharray="4,3" pointer-events="none"/>`;
     if (Number.isFinite(moveMargin)) svg += `<text class="margin-loss-number" x="${x}" y="${y + radius * .74}" text-anchor="middle" font-size="9" font-weight="650" fill="#172b1d" pointer-events="none">${signed(moveMargin)}</text>`;
@@ -477,14 +547,19 @@ function drawBoard(force = false) {
   for (let c = 0; c < N; c++) {
     const [x0, y0] = xy(Math.max(0, c - MID) * N + c), [x1, y1] = xy(Math.min(N - 1, c + MID) * N + c);
     const letter = String.fromCharCode(65 + c);
-    if (c <= MID) svg += `<text class="coord" x="${x0 + offset * dx / 2}" y="${y0 - offset * dy}">${letter}</text>`;
-    if (c >= MID) svg += `<text class="coord" x="${x1 - offset * dx / 2}" y="${y1 + offset * dy}">${letter}</text>`;
+    if (c <= MID) {
+      const x = x0 + offset * dx / 2, y = y0 - offset * dy;
+      svg += `<text class="coord" x="${x}" y="${y}" transform="rotate(30 ${x} ${y})">${letter}</text>`;
+    }
+    if (c >= MID) {
+      const x = x1 - offset * dx / 2, y = y1 + offset * dy;
+      svg += `<text class="coord" x="${x}" y="${y}" transform="rotate(30 ${x} ${y})">${letter}</text>`;
+    }
   }
   board.innerHTML = svg;
   if (placing) {
     $("ownership-marker-value").textContent = "";
     $("map-caption").textContent = $("turn-text").textContent;
-    updatePreviewLine();
     return;
   }
   if (settled) $("map-caption").textContent = legendLabel;
@@ -495,20 +570,6 @@ function drawBoard(force = false) {
     : carriedMap ? `Previous search’s preview · Red ${signed(mapMargin)} cells.` : legendLabel;
   else if (marginOn) $("map-caption").textContent = result ? `Margins for ${displayedSide === 1 ? "Red" : "White"}${hasBaseline ? `; colors show loss relative to ${cellName(displayedBest)}` : ""}.` : "No searched margins yet.";
   else $("map-caption").textContent = legendLabel;
-  updatePreviewLine();
-}
-
-function updatePreviewLine() {
-  if (setupPhase || engine && engine._hn_score(2)) {
-    $("candidate-pv").hidden = true;
-    $("candidate-pv").textContent = "";
-    return;
-  }
-  const preview = previewCandidate();
-  const candidate = preview || result && result.candidates.find(c => c.move === result.best);
-  const moves = candidate && candidate.pv || [];
-  $("candidate-pv").hidden = !moves.length;
-  $("candidate-pv").textContent = moves.length ? `${preview ? `After ${cellName(preview.move)}: ` : ""}${moves.map(cellName).join(" ")}` : "";
 }
 
 function cancelCandidateRowAnimations() {
@@ -537,37 +598,68 @@ function firstListedMove() {
     engine._hn_value(move) > 0 ? move : null;
 }
 
-function sortedCandidates(data) {
-  return data.candidates.filter(candidate => candidate.visits > 0).slice().sort((a, b) => {
-    if (candidateSort === "margin") {
-      const aKnown = Number.isFinite(a.margin), bKnown = Number.isFinite(b.margin);
-      if (aKnown !== bKnown) return aKnown ? -1 : 1;
-      if (aKnown && a.margin !== b.margin) return b.margin - a.margin;
-    }
-    return b.visits - a.visits || a.move - b.move;
-  });
+function cancelComputerMove() {
+  if (computerMoveTimer !== null) clearTimeout(computerMoveTimer);
+  computerMoveTimer = null;
 }
 
-function updateCandidateSortHeaders() {
-  for (const sort of ["visits", "margin"]) {
-    const selected = candidateSort === sort;
-    $(`${sort}-heading`).setAttribute("aria-sort", selected ? "descending" : "none");
-    $(`sort-${sort}`).setAttribute("aria-pressed", String(selected));
+function visitLeadLocked() {
+  if (!searching || !result || result.type !== "progress" ||
+      result.gen !== generation || activePositionKey !== positionKey() ||
+      !Number.isSafeInteger(result.visits) || result.visits < 0 || result.visits > FIXED_SEARCH_VISITS) return false;
+  let leader = null, second = 0, total = 0;
+  for (const candidate of result.candidates) {
+    if (!Number.isSafeInteger(candidate.visits) || candidate.visits < 0 || candidate.visits > result.visits) return false;
+    total += candidate.visits;
+    if (!leader || candidate.visits > leader.visits) {
+      if (leader) second = leader.visits;
+      leader = candidate;
+    } else second = Math.max(second, candidate.visits);
   }
+  // Root visits include inherited work and possibly an initial evaluation
+  // with no edge visit. Each remaining simulation can give a rival at most
+  // one visit; equality is not enough to guarantee the current first row.
+  const remaining = FIXED_SEARCH_VISITS - result.visits;
+  return total <= result.visits && leader && leader.move === renderedCandidateMoves[0] &&
+    leader.visits > second + remaining;
 }
 
-function setCandidateSort(sort) {
-  if (!["visits", "margin"].includes(sort) || candidateSort === sort) return;
-  candidateSort = sort;
-  // A held preview keeps the displayed order and its sort marker until release.
-  if (result) showResult(result);
-  else updateCandidateSortHeaders();
+function computerMoveReady() {
+  const computerSide = $("playmode").value === "red" ? 1 : $("playmode").value === "white" ? 2 : 0;
+  // A Load click blurs the textbox before its click handler reads the input.
+  // Keep an unapplied draft intact even after focus has moved to that button.
+  return !!(engine && workerReady && computerSide && !setupPhase &&
+    cursor === history.length && !movePressActive() && !timelineGesture &&
+    document.activeElement !== $("moves") && $("moves").value === gameText() &&
+    !engine._hn_score(2) &&
+    computerSide === engine._hn_stm() && result && result.side === computerSide &&
+    !result.stopped && !result.capacityReached &&
+    ((!searching && (result.type === "done" || result.type === "cached") && result.visits >= FIXED_SEARCH_VISITS) ||
+      visitLeadLocked()));
+}
+
+function queueComputerMove() {
+  cancelComputerMove();
+  if (!computerMoveReady() || firstListedMove() === null) return;
+  const key = positionKey(), gen = generation;
+  // Defer until the current input/report finishes. Recheck the live position,
+  // mode and displayed rank so neither stale results nor gestures choose a move.
+  computerMoveTimer = setTimeout(() => {
+    computerMoveTimer = null;
+    if (gen !== generation || key !== positionKey() || !computerMoveReady()) return;
+    const move = firstListedMove();
+    if (move !== null) playMove(move);
+  }, 0);
+}
+
+function sortedCandidates(data) {
+  return data.candidates.filter(candidate => candidate.visits > 0).slice()
+    .sort((a, b) => b.visits - a.visits || a.move - b.move);
 }
 
 function renderCandidates(candidates, total, best, hasBaseline) {
   const table = $("candidates");
   renderedCandidateMoves = candidates.map(candidate => candidate.move);
-  updateCandidateSortHeaders();
   const descriptions = candidates.map(candidate => {
     const share = 100 * candidate.visits / Math.max(1, total);
     const loss = hasBaseline && Number.isFinite(candidate.margin) ? best.margin - candidate.margin : null;
@@ -640,9 +732,11 @@ function showResult(data) {
   const hasBaseline = best && best.visits > 0 && Number.isFinite(best.margin);
   if (!movePressActive()) renderCandidates(candidates, total, best, hasBaseline);
   drawBoard();
+  queueComputerMove();
 }
 
 function cancelSearch(clear = true) {
+  cancelComputerMove();
   generation++;
   if (worker) worker.postMessage({type: "stop"});
   searching = false;
@@ -665,10 +759,7 @@ function cancelSearch(clear = true) {
     cancelCandidateRowAnimations();
     $("candidates").innerHTML = "";
     renderedCandidateMoves = [];
-    updateCandidateSortHeaders();
     candidatePane.scrollTop = 0;
-    $("candidate-pv").textContent = "";
-    $("candidate-pv").hidden = true;
   }
 }
 
@@ -712,8 +803,12 @@ function refreshPosition() {
     return;
   }
   const settled = !!engine._hn_score(2), redToMove = engine._hn_stm() === 1;
-  if (settled) rememberTimelineMargin(positionKey(), engine._hn_score(0) - engine._hn_score(1));
-  const turnText = settled ? `Settled · Red ${engine._hn_score(0)}, White ${engine._hn_score(1)}` : redToMove ? "Red to move" : "White to move";
+  let turnText = redToMove ? "Red to move" : "White to move";
+  if (settled) {
+    const margin = engine._hn_score(0) - engine._hn_score(1), points = Math.abs(margin);
+    rememberTimelineMargin(positionKey(), margin);
+    turnText = `${margin > 0 ? "Red" : "White"} wins by ${points} ${points === 1 ? "point" : "points"}`;
+  }
   $("turn-text").textContent = workerReady ? turnText : "Loading…";
   $("turn-stone").hidden = settled || !workerReady;
   $("turn-stone").classList.toggle("red", !settled && redToMove);
@@ -721,7 +816,7 @@ function refreshPosition() {
   drawMarginTimeline();
   $("back").disabled = !cursor;
   $("forward").disabled = cursor >= history.length;
-  $("moves").value = [...starts, ...history].map(cellName).join(" ");
+  $("moves").value = gameText();
   drawBoard();
   const cached = getCachedResult(positionKey());
   if (cached) {
@@ -733,7 +828,7 @@ function refreshPosition() {
   startSearch();
 }
 
-function newGame() {
+function newGame(playSetupSound = true) {
   if (!engine) return;
   cancelTimelineGesture();
   marginHistory.clear();
@@ -745,6 +840,7 @@ function newGame() {
   if (!setupPhase) {
     starts = $("startmode").value === "b" ? balancedStart() : randomStart();
     engine._hn_init_display(starts[0], starts[1]);
+    if (playSetupSound) { playMoveSound(); playMoveSound(.1); }
   }
   refreshPosition();
 }
@@ -761,6 +857,7 @@ function chooseStartCell(cell) {
     setupPhase = 0; setupRed = null;
     engine._hn_init_display(starts[0], starts[1]);
   }
+  playMoveSound();
   refreshPosition();
 }
 
@@ -803,6 +900,7 @@ function loadPosition() {
 
 function playMove(move) {
   if (!engine || setupPhase || move < 0 || !engine._hn_play(move)) return;
+  playMoveSound();
   // Look up the move actually played, independent of the hover or table sort.
   // Reports are Red-relative even when this advance changes the player to move.
   const candidate = result && result.candidates.find(candidate => candidate.move === move);
@@ -1124,8 +1222,9 @@ document.querySelectorAll("[data-view]").forEach(button => button.addEventListen
   document.querySelectorAll("[data-view]").forEach(b => { const on = b === button; b.classList.toggle("selected", on); b.setAttribute("aria-pressed", on); });
   drawBoard();
 }));
-for (const sort of ["visits", "margin"])
-  $(`sort-${sort}`).addEventListener("click", () => setCandidateSort(sort));
+$("playmode").addEventListener("change", queueComputerMove);
+$("moves").addEventListener("focus", cancelComputerMove);
+$("moves").addEventListener("blur", queueComputerMove);
 $("load").addEventListener("click", () => loadPosition());
 $("newgame").addEventListener("click", newGame);
 $("copy").addEventListener("click", async () => {
@@ -1180,6 +1279,7 @@ function finishTimelineGesture(event) {
   event.preventDefault();
   cancelTimelineGesture();
   updateTimelineLabel();
+  queueComputerMove();
 }
 $("review").addEventListener("pointerup", finishTimelineGesture);
 $("review").addEventListener("pointercancel", finishTimelineGesture);
@@ -1187,6 +1287,7 @@ $("review").addEventListener("lostpointercapture", event => {
   if (!timelineGesture || timelineGesture.pointerId !== event.pointerId) return;
   cancelTimelineGesture();
   updateTimelineLabel();
+  queueComputerMove();
 });
 $("review").addEventListener("pointerleave", () => {
   if (!timelineGesture) { timelineHoverIndex = null; updateTimelineLabel(); }
@@ -1225,14 +1326,13 @@ document.addEventListener("keydown", event => {
     reviewAt(cursor + (event.key === "ArrowLeft" ? -1 : 1));
     updateTimelineLabel();
   } else if (event.key === " ") {
-    // Space is a game command even with a sort/mode button or candidate focused.
-    // Sort buttons still retain their native Enter activation.
+    // Space is a game command even with a display button or candidate focused.
     // Consume repeats and empty results without scrolling or activating it.
     event.preventDefault();
     // A click-focused control otherwise gains a keyboard focus ring on Space,
     // although this key plays a move rather than activating that control.
     const control = event.target && event.target.closest
-      ? event.target.closest("[data-view], [data-candidate-sort]") : null;
+      ? event.target.closest("[data-view]") : null;
     if (control && typeof control.blur === "function") control.blur();
     if (event.repeat || !engine || setupPhase || engine._hn_score(2) || !result) return;
     // Read the displayed rank, not a newer report's order during a held press.
@@ -1246,7 +1346,7 @@ document.addEventListener("keydown", event => {
 HN().then(module => {
   engine = module;
   for (const id of ["load", "newgame", "copy"]) $(id).disabled = false;
-  worker = new Worker("search-worker.js?v=20261002-24");
+  worker = new Worker("search-worker.js?v=20261002-30");
   worker.onmessage = event => {
     const data = event.data;
     if (data.type === "ready") {
@@ -1266,9 +1366,10 @@ HN().then(module => {
         searching = false;
         if (data.capacityReached) $("analysis-error").textContent = "Analysis could not finish: tree capacity reached.";
         else if (data.stopped || data.visits < FIXED_SEARCH_VISITS) $("analysis-error").textContent = "Analysis stopped before completion.";
+        queueComputerMove();
       }
     }
   };
   worker.onerror = event => { $("analysis-error").textContent = "Search worker error: " + event.message; searching = false; };
-  newGame();
+  newGame(false);
 }).catch(error => { $("turn-text").textContent = "Engine failed to load"; $("analysis-error").textContent = String(error.message || error); });
