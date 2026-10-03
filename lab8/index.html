@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HighNoon</title>
-  <link rel="stylesheet" href="style.css?v=20261002-30">
+  <link rel="stylesheet" href="style.css?v=20261003-31">
 </head>
 <body>
   <header>
     <div><h1>HighNoon</h1><p>Size <span id="board-size">6</span></p></div>
-    <select id="playmode" aria-label="Play mode"><option value="analysis">Analysis</option><option value="red">HighNoon is red</option><option value="white">HighNoon is white</option></select>
+    <select id="playmode" aria-label="Play mode"><option value="analysis">Analysis</option><option value="red">HighNoon is red</option><option value="white">HighNoon is white</option><option value="both">HighNoon is both</option></select>
   </header>
   <main>
     <section class="board-panel" aria-label="Game board">
@@ -49,7 +49,7 @@
       </section>
       <section class="card position">
         <textarea id="moves" rows="3" spellcheck="false" aria-label="Move list" placeholder="A1 H5 …"></textarea>
-        <div class="controls"><button id="load" disabled>Load</button><button id="copy" disabled>Copy</button></div>
+        <div class="controls"><button id="load" disabled>Load</button><button id="analyze-game" disabled aria-pressed="false">Analyze game</button><button id="copy" disabled>Copy</button></div>
         <p id="position-error" class="error" role="alert"></p>
       </section>
       <section class="card history-panel" aria-label="Game history">
@@ -63,7 +63,7 @@
     </aside>
   </main>
   <script src="config.js"></script>
-  <script src="hn.js?v=20261002-30"></script>
-  <script src="app.js?v=20261002-30"></script>
+  <script src="hn.js?v=20261003-31"></script>
+  <script src="app.js?v=20261003-31"></script>
 </body>
 </html>

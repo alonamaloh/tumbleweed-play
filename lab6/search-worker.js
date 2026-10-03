@@ -2,7 +2,7 @@
 
 // Each short WASM slice returns to the worker event loop. Position changes and
 // Stop can therefore cancel a search without destroying a loaded engine.
-importScripts("config.js", "hn.js?v=20261002-30");
+importScripts("config.js", "hn.js?v=20261003-31");
 let engine = null;
 let active = null;
 let pending = null;

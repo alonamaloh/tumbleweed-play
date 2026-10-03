@@ -116,7 +116,8 @@ tr[data-move] { cursor: pointer; }
   .table-wrap { max-height: clamp(132px, calc(100dvh - 330px - var(--history-height)), 310px); }
   .position { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
   .position textarea { height: 58px; min-height: 58px; margin-top: 0; }
-  .position .controls { margin: 0; gap: 6px; flex-wrap: nowrap; }
+  .position .controls { display: grid; grid-template-columns: auto auto; margin: 0; gap: 6px; }
+  #analyze-game { grid-column: 1 / -1; grid-row: 2; white-space: nowrap; }
   #position-error { grid-column: 1 / -1; margin: 0; }
   #position-error:empty { display: none; }
   #review { height: var(--history-height); }

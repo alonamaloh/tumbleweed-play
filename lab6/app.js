@@ -36,6 +36,8 @@ let cursor = 0;
 let generation = 0;
 let searching = false;
 let computerMoveTimer = null;
+let gameAnalysis = null;
+let gameAnalysisTimer = null;
 let moveAudio = null;
 let moveAudioUnlock = null;
 let thudNoise = null;
@@ -115,7 +117,7 @@ function playMoveSound(delay = 0) {
     bass.frequency.setValueAtTime(150, now);
     bass.frequency.exponentialRampToValueAtTime(65, now + .045);
     bassGain.gain.setValueAtTime(.0001, now);
-    bassGain.gain.linearRampToValueAtTime(.14, now + .005);
+    bassGain.gain.linearRampToValueAtTime(.35, now + .005);
     bassGain.gain.exponentialRampToValueAtTime(.0001, now + .13);
     bass.connect(bassGain); bassGain.connect(audio.destination);
     bass.onended = () => { bass.disconnect(); bassGain.disconnect(); };
@@ -124,7 +126,7 @@ function playMoveSound(delay = 0) {
     const tap = audio.createBufferSource(), filter = audio.createBiquadFilter(), tapGain = audio.createGain();
     tap.buffer = thudNoise;
     filter.type = "lowpass"; filter.frequency.value = 800; filter.Q.value = .6;
-    tapGain.gain.setValueAtTime(.055, now);
+    tapGain.gain.setValueAtTime(.14, now);
     tapGain.gain.exponentialRampToValueAtTime(.0001, now + .03);
     tap.connect(filter); filter.connect(tapGain); tapGain.connect(audio.destination);
     tap.onended = () => { tap.disconnect(); filter.disconnect(); tapGain.disconnect(); };
@@ -527,7 +529,7 @@ function drawBoard(force = false) {
     if (territory === 1 || territory === 2) svg += `<g class="territory-lock" data-lock-cell="${cell}" pointer-events="none" transform="translate(${x - radius * .52},${y + radius * .28})"><path d="M-2,-1v-2a2,2 0 0 1 4,0v2" fill="none" stroke="#575e53" stroke-width="1.3"/><rect x="-3" y="-1" width="6" height="5" rx="1" fill="${territory === 1 ? "#ba4238" : "#fffefa"}" stroke="#575e53" stroke-width=".9"/></g>`;
     if (cursor && cell === history[cursor - 1]) svg += `<path class="last-move" data-last-move="${cell}" d="${hexPath(x, y)}" fill="none" stroke="#ff8c00" stroke-width="3" pointer-events="none"/>`;
     if (ghost) svg += `<path d="${hexPath(x, y)}" fill="none" stroke="#00e676" stroke-width="4" pointer-events="none"/>`;
-    else if (cell === highlightedMove) svg += `<path class="candidate-recommendation" data-recommended-move="${cell}" d="${hexPath(x, y)}" fill="none" stroke="#00e676" stroke-width="3" stroke-dasharray="4,3" pointer-events="none"/>`;
+    else if (cell === highlightedMove) svg += `<path class="candidate-recommendation" data-recommended-move="${cell}" d="${hexPath(x, y)}" fill="none" stroke="#bf00ff" stroke-width="3" stroke-dasharray="4,3" pointer-events="none"/>`;
     if (Number.isFinite(moveMargin)) svg += `<text class="margin-loss-number" x="${x}" y="${y + radius * .74}" text-anchor="middle" font-size="9" font-weight="650" fill="#172b1d" pointer-events="none">${signed(moveMargin)}</text>`;
   }
   if (view === "visits" && !ownershipPreview && total) {
@@ -625,10 +627,11 @@ function visitLeadLocked() {
 }
 
 function computerMoveReady() {
-  const computerSide = $("playmode").value === "red" ? 1 : $("playmode").value === "white" ? 2 : 0;
+  const mode = $("playmode").value;
+  const computerSide = mode === "both" && engine ? engine._hn_stm() : mode === "red" ? 1 : mode === "white" ? 2 : 0;
   // A Load click blurs the textbox before its click handler reads the input.
   // Keep an unapplied draft intact even after focus has moved to that button.
-  return !!(engine && workerReady && computerSide && !setupPhase &&
+  return !!(engine && workerReady && computerSide && !setupPhase && !gameAnalysis &&
     cursor === history.length && !movePressActive() && !timelineGesture &&
     document.activeElement !== $("moves") && $("moves").value === gameText() &&
     !engine._hn_score(2) &&
@@ -650,6 +653,71 @@ function queueComputerMove() {
     const move = firstListedMove();
     if (move !== null) playMove(move);
   }, 0);
+}
+
+function updateGameAnalysisButton() {
+  const button = $("analyze-game");
+  button.disabled = !engine || !workerReady || !!setupPhase;
+  button.textContent = gameAnalysis ? "Stop analysis" : "Analyze game";
+  button.setAttribute("aria-pressed", String(!!gameAnalysis));
+  button.setAttribute("aria-label", gameAnalysis
+    ? `Stop game analysis at position ${cursor} of ${gameAnalysis.end}` : "Analyze game");
+}
+
+function stopGameAnalysis() {
+  if (gameAnalysisTimer !== null) clearTimeout(gameAnalysisTimer);
+  gameAnalysisTimer = null;
+  gameAnalysis = null;
+  updateGameAnalysisButton();
+}
+
+function gameAnalysisPositionReady() {
+  if (!gameAnalysis || searching || !engine || setupPhase ||
+      movePressActive() || timelineGesture) return false;
+  if (engine._hn_score(2)) return true;
+  // A locked visit leader is enough for computer play, but game review needs
+  // the entire budget. A cached completion can have an older worker generation.
+  return !!(result && (result.type === "done" || result.type === "cached") &&
+    (result.type === "cached" || result.gen === generation) &&
+    result.side === engine._hn_stm() && !result.stopped && !result.capacityReached &&
+    Number.isSafeInteger(result.visits) && result.visits >= FIXED_SEARCH_VISITS);
+}
+
+function queueGameAnalysis() {
+  if (gameAnalysisTimer !== null || !gameAnalysisPositionReady()) return;
+  const run = gameAnalysis, key = positionKey(), gen = generation;
+  // Yield even between cached positions, keeping Stop and navigation responsive.
+  gameAnalysisTimer = setTimeout(() => {
+    gameAnalysisTimer = null;
+    if (gameAnalysis !== run || gen !== generation || key !== positionKey() ||
+        !gameAnalysisPositionReady()) return;
+    if (cursor >= run.end) { stopGameAnalysis(); return; }
+    reviewAt(cursor + 1, true);
+  }, 0);
+}
+
+function toggleGameAnalysis() {
+  if (gameAnalysis) {
+    stopGameAnalysis();
+    cancelSearch(false); // Keep the partial display, but invalidate late reports.
+    return;
+  }
+  if (!engine || !workerReady || setupPhase) return;
+  if ($("moves").value !== gameText()) {
+    $("position-error").textContent = "Load the edited game before analyzing it.";
+    return;
+  }
+  cancelTimelineGesture();
+  cancelComputerMove();
+  $("playmode").value = "analysis";
+  gameAnalysis = {end: history.length};
+  updateGameAnalysisButton();
+  // Start with the two stacks already placed, not either incomplete setup step.
+  // Refresh even at cursor zero: an interrupted search must finish its budget.
+  cancelSearch();
+  cursor = 0;
+  replay(starts[0], starts[1], history, cursor);
+  refreshPosition();
 }
 
 function sortedCandidates(data) {
@@ -733,6 +801,7 @@ function showResult(data) {
   if (!movePressActive()) renderCandidates(candidates, total, best, hasBaseline);
   drawBoard();
   queueComputerMove();
+  queueGameAnalysis();
 }
 
 function cancelSearch(clear = true) {
@@ -791,6 +860,7 @@ function refreshPosition() {
   $("position-error").textContent = "";
   $("analysis-error").textContent = "";
   $("copy").disabled = !!setupPhase;
+  updateGameAnalysisButton();
   if (setupPhase) {
     $("turn-text").textContent = setupPhase === 1 ? "Choose Red’s starting cell" : "Choose White’s starting cell";
     $("turn-stone").hidden = false;
@@ -826,10 +896,12 @@ function refreshPosition() {
     return;
   }
   startSearch();
+  queueGameAnalysis(); // Exact settled positions do not need a search report.
 }
 
 function newGame(playSetupSound = true) {
   if (!engine) return;
+  stopGameAnalysis();
   cancelTimelineGesture();
   marginHistory.clear();
   marginGraphLimit = MARGIN_GRAPH_MIN;
@@ -868,6 +940,7 @@ function selectBoardCell(cell) {
 
 function loadPosition() {
   if (!engine) return;
+  stopGameAnalysis();
   try {
     let red, white;
     const text = $("moves").value.trim();
@@ -900,6 +973,7 @@ function loadPosition() {
 
 function playMove(move) {
   if (!engine || setupPhase || move < 0 || !engine._hn_play(move)) return;
+  stopGameAnalysis();
   playMoveSound();
   // Look up the move actually played, independent of the hover or table sort.
   // Reports are Red-relative even when this advance changes the player to move.
@@ -914,8 +988,9 @@ function playMove(move) {
   refreshPosition();
 }
 
-function reviewAt(next) {
+function reviewAt(next, fromGameAnalysis = false) {
   if (!engine || setupPhase || !Number.isFinite(next)) return;
+  if (!fromGameAnalysis) stopGameAnalysis();
   next = Math.max(0, Math.min(history.length, Math.round(next)));
   if (next === cursor) return;
   timelineHoverIndex = null;
@@ -1222,10 +1297,24 @@ document.querySelectorAll("[data-view]").forEach(button => button.addEventListen
   document.querySelectorAll("[data-view]").forEach(b => { const on = b === button; b.classList.toggle("selected", on); b.setAttribute("aria-pressed", on); });
   drawBoard();
 }));
-$("playmode").addEventListener("change", queueComputerMove);
-$("moves").addEventListener("focus", cancelComputerMove);
+$("playmode").addEventListener("change", () => {
+  stopGameAnalysis();
+  queueComputerMove();
+});
+$("moves").addEventListener("focus", () => {
+  cancelComputerMove();
+  if (gameAnalysis) { stopGameAnalysis(); cancelSearch(false); }
+});
 $("moves").addEventListener("blur", queueComputerMove);
+$("moves").addEventListener("keydown", event => {
+  if (event.key !== "Enter" || event.defaultPrevented || event.repeat ||
+      event.isComposing || event.keyCode === 229 || event.altKey || event.ctrlKey ||
+      event.metaKey || event.shiftKey || !engine || $("load").disabled) return;
+  event.preventDefault();
+  loadPosition();
+});
 $("load").addEventListener("click", () => loadPosition());
+$("analyze-game").addEventListener("click", toggleGameAnalysis);
 $("newgame").addEventListener("click", newGame);
 $("copy").addEventListener("click", async () => {
   if (setupPhase) return;
@@ -1346,7 +1435,7 @@ document.addEventListener("keydown", event => {
 HN().then(module => {
   engine = module;
   for (const id of ["load", "newgame", "copy"]) $(id).disabled = false;
-  worker = new Worker("search-worker.js?v=20261002-30");
+  worker = new Worker("search-worker.js?v=20261003-31");
   worker.onmessage = event => {
     const data = event.data;
     if (data.type === "ready") {
@@ -1357,19 +1446,38 @@ HN().then(module => {
       return;
     }
     if (data.gen !== undefined && data.gen !== generation) return;
-    if (data.type === "error") { searching = false; $("analysis-error").textContent = data.message; return; }
+    if (data.type === "error") {
+      stopGameAnalysis();
+      cancelSearch(false);
+      $("analysis-error").textContent = data.message;
+      return;
+    }
     if (data.type === "progress" || data.type === "done") {
       if (setupPhase) return;
+      if (gameAnalysis && (data.side !== engine._hn_stm() ||
+          !Number.isSafeInteger(data.visits) || data.visits < 0)) {
+        stopGameAnalysis();
+        cancelSearch(false);
+        $("analysis-error").textContent = "Analysis could not finish: invalid search result.";
+        return;
+      }
       showResult(data);
       cacheSearchResult(activePositionKey, data);
       if (data.type === "done") {
         searching = false;
         if (data.capacityReached) $("analysis-error").textContent = "Analysis could not finish: tree capacity reached.";
         else if (data.stopped || data.visits < FIXED_SEARCH_VISITS) $("analysis-error").textContent = "Analysis stopped before completion.";
+        if (gameAnalysis && (data.visits < FIXED_SEARCH_VISITS ||
+            data.stopped || data.capacityReached)) stopGameAnalysis();
         queueComputerMove();
+        queueGameAnalysis();
       }
     }
   };
-  worker.onerror = event => { $("analysis-error").textContent = "Search worker error: " + event.message; searching = false; };
+  worker.onerror = event => {
+    stopGameAnalysis();
+    cancelSearch(false);
+    $("analysis-error").textContent = "Search worker error: " + event.message;
+  };
   newGame(false);
 }).catch(error => { $("turn-text").textContent = "Engine failed to load"; $("analysis-error").textContent = String(error.message || error); });
