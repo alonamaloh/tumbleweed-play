@@ -9,7 +9,7 @@ main { max-width: 1220px; margin: auto; display: grid; grid-template-columns: mi
 .board-panel { position: relative; min-width: 0; text-align: center; }
 .board-tools { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .board-modes { display: flex; justify-content: center; align-items: center; width: 100%; min-height: 34px; }
-.game-identity { margin: 0; color: var(--muted); font-size: 14px; font-weight: 600; }
+#workspace:not([data-experience="analysis"]) .board-modes { display: none; }
 .turn-indicator { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 30px; font-size: 20px; font-weight: 700; }
 .turn-indicator.red { color: var(--red); }
 .turn-stone { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 1px solid #777c70; background: #fff; }

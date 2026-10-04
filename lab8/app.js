@@ -442,7 +442,7 @@ function getCachedResult(key) {
   return cached;
 }
 
-$("board-size").textContent = SIDE;
+$("board-subtitle").textContent = `Size ${SIDE}`;
 document.title = "HighNoon";
 // Fit the board and its coordinate labels closely instead of scaling a large
 // invisible border along with every cell.
@@ -499,9 +499,8 @@ function updateExperienceUI() {
     button.setAttribute("aria-pressed", String(selected));
     button.disabled = !opening || ["offering", "evaluating"].includes(pieStage);
   });
-  $("game-identity").hidden = experience !== "play";
-  $("game-identity").textContent = humanSide
-    ? `${difficulty[0].toUpperCase() + difficulty.slice(1)} · You are ${humanSide === 1 ? "Red" : "White"}` : "";
+  $("board-subtitle").textContent = playing
+    ? difficulty[0].toUpperCase() + difficulty.slice(1) : `Size ${SIDE}`;
   $("highnoon-offer").hidden = !opening || pieStage !== "placing" || setupPhase !== 1;
   $("highnoon-offer").disabled = !engine;
   $("undo-offer").hidden = !opening || !(pieStage === "offered" || pieStage === "placing" && setupPhase === 2);
@@ -1174,7 +1173,7 @@ function refreshPosition(preserveDraft = false) {
   updateGameAnalysisButton();
   if (setupPhase) {
     $("turn-text").textContent = pieStage === "offering"
-      ? `HighNoon is placing the ${setupPhase === 1 ? "red" : "white"} starting stack…`
+      ? `Placing ${setupPhase === 1 ? "Red" : "White"}’s stack…`
       : setupPhase === 1 ? "Choose Red’s starting cell" : "Choose White’s starting cell";
     $("turn-stone").hidden = false;
     $("turn-stone").classList.toggle("red", setupPhase === 1);
@@ -1194,7 +1193,7 @@ function refreshPosition(preserveDraft = false) {
     turnText = `${margin > 0 ? "Red" : "White"} wins by ${points} ${points === 1 ? "point" : "points"}`;
   } else if (experience === "setup") {
     turnText = pieStage === "choosing" ? "Choose your color" : pieStage === "evaluating"
-      ? "HighNoon is choosing a color…" : "Ready to offer this position";
+      ? "Choosing a color…" : "Ready to offer this position";
   } else if (experience === "play") {
     const humanTurn = humanSide === engine._hn_stm();
     turnText = humanTurn ? `Your turn · ${humanSide === 1 ? "Red" : "White"}`
@@ -1893,7 +1892,7 @@ function searchFailed(message) {
 HN().then(module => {
   engine = module;
   for (const id of ["load", "newgame", "copy", "share"]) $(id).disabled = false;
-  worker = new Worker("search-worker.js?v=20261004-50");
+  worker = new Worker("search-worker.js?v=20261004-51");
   worker.onmessage = event => {
     let data = event.data;
     if (["preliminary", "preliminary-done", "preliminary-error"].includes(data.type)) {
