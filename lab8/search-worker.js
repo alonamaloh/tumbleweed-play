@@ -2,7 +2,7 @@
 
 // Each short WASM slice returns to the worker event loop. Position changes and
 // Stop can therefore cancel a search without destroying a loaded engine.
-importScripts("config.js", "hn.js?v=20261004-40");
+importScripts("config.js", "hn.js?v=20261004-47");
 let engine = null;
 let active = null;
 let pending = null;
@@ -143,10 +143,24 @@ function rootSnapshot() {
     ownership.push(m._hn_ownership(cell));
     stdev.push(m._hn_ownership_stdev(cell));
   }
-  return {gen: active.gen, type: "progress", side: m._hn_stm(), best: m._hn_search_best(),
+  return {gen: active.gen, type: "progress", context: active.context, purpose: active.purpose,
+    budgetSims: active.budgetSims, side: m._hn_stm(), best: m._hn_search_best(),
     visits: m._hn_last(1), inheritedVisits: m._hn_last(6), ms: m._hn_last(2), depth: m._hn_last(0),
     capacityReached: !!m._hn_last(5),
     samples: m._hn_ownership_samples(), candidates, ownership, stdev};
+}
+
+function searchJob(message) {
+  // Older callers used just a position and a target. New callers isolate Play,
+  // Analysis and each difficulty with their own session-qualified context.
+  const context = typeof message.context === "string" ? message.context : "";
+  const purpose = ["analysis", "play", "offer"].includes(message.purpose) ? message.purpose : "analysis";
+  const budgetSims = Number.isSafeInteger(message.sims) && message.sims > 0 &&
+    message.sims <= ANALYSIS_CONFIG.searchSims ? message.sims : ANALYSIS_CONFIG.searchSims;
+  // Easy must really be one fresh simulation, not a previously searched tree.
+  // Color-choice valuations are similarly independent of an earlier offering.
+  const fresh = message.fresh === true || purpose === "offer" || purpose === "play" && budgetSims === 1;
+  return {...message, context, purpose, budgetSims, fresh};
 }
 
 function beginPending() {
@@ -159,20 +173,23 @@ function beginPending() {
   try {
     // Only an exact forward extension refers to descendants of this tree.
     // Review backwards, different starts and sibling branches rebuild safely.
-    const forward = position && position.red === active.red && position.white === active.white &&
+    const forward = !active.fresh && position && position.context === active.context &&
+      position.purpose === active.purpose && position.red === active.red && position.white === active.white &&
       position.moves.length <= active.moves.length && position.moves.every((move, index) => move === active.moves[index]);
     if (!forward) engine._hn_init_search(active.red, active.white, ANALYSIS_CONFIG.treeMemoryMiB);
     for (const move of active.moves.slice(forward ? position.moves.length : 0)) {
       if (move < 0) engine._hn_pass();
       else if (!engine._hn_play(move)) throw new Error("Illegal move in search position.");
     }
-    position = {red: active.red, white: active.white, moves: active.moves.slice()};
-    active.searchStarted = !!engine._hn_search_start(active.sims > 0 ? active.sims : ANALYSIS_CONFIG.searchSims);
+    position = {red: active.red, white: active.white, moves: active.moves.slice(),
+      context: active.context, purpose: active.purpose};
+    active.searchStarted = !!engine._hn_search_start(active.budgetSims);
     active.reportInherited = engine._hn_last(6) > 0;
     lastReport = 0;
     timer = setTimeout(step, 0);
   } catch (error) {
-    postMessage({type: "error", gen: active.gen, message: String(error.message || error)});
+    postMessage({type: "error", gen: active.gen, context: active.context, purpose: active.purpose,
+      budgetSims: active.budgetSims, message: String(error.message || error)});
     active = null;
     position = null;
   }
@@ -205,7 +222,8 @@ function step() {
     if (!more) active = null;
     else timer = setTimeout(step, 0);
   } catch (error) {
-    postMessage({type: "error", gen: job.gen, message: String(error.message || error)});
+    postMessage({type: "error", gen: job.gen, context: job.context, purpose: job.purpose,
+      budgetSims: job.budgetSims, message: String(error.message || error)});
     active = null;
     position = null;
   } finally {
@@ -225,7 +243,7 @@ self.onmessage = event => {
   } else if (message.type === "preliminary-stop") {
     stopPreliminary();
   } else if (message.type === "search") {
-    pending = message;
+    pending = searchJob(message);
     beginPending();
   } else if (message.type === "stop") {
     pending = null;

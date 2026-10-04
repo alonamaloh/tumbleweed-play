@@ -13,6 +13,8 @@ const signed = value => Number.isFinite(value) ? (value > 0 ? "+" : "") + value.
 const cells = Array.from({length: N * N}, (_, i) => i).filter(valid);
 const radius = SIDE === 6 ? 27 : 19.5;
 const FIXED_SEARCH_VISITS = ANALYSIS_CONFIG.searchSims || 100000;
+const DIFFICULTY_SIMS = Object.freeze({easy: 1, medium: 20, hard: 316, expert: FIXED_SEARCH_VISITS});
+const MIN_COMPUTER_RESPONSE_MS = 1200;
 const PRELIMINARY_SEARCH_VISITS = 2000;
 const CANDIDATE_ROW_SLIDE_MS = 360;
 const candidateRowAnimations = new Map();
@@ -34,13 +36,29 @@ let marginGraphLimit = MARGIN_GRAPH_MIN;
 let engine = null;
 let worker = null;
 let workerReady = false;
-let starts = SIDE === 6 ? [47, 96] : [79, 176]; // D5/I9 or E6/L12.
+let starts = []; // Recorded starting placements, retained while reviewing earlier steps.
 let history = [];
-let cursor = 0;
+// Keep worker/cache indices ordinary-ply based: -2 is empty, -1 is Red only,
+// and 0 is the complete pair. Visible move numbers add the two setup plies.
+let cursor = -2;
 let generation = 0;
 let searching = false;
 let sharingGame = false;
 let computerMoveTimer = null;
+let computerTurnStartedAt = null;
+let offeringTimer = null;
+let offeringToken = 0;
+let experience = "setup"; // setup -> play -> analysis; New game always starts over.
+let pieStage = "placing"; // placing, offering, offered, choosing, evaluating.
+let difficulty = "medium";
+let humanSide = 0;
+let searchSession = 0;
+let activeSearchBudget = FIXED_SEARCH_VISITS;
+let activeSearchPurpose = "analysis";
+try {
+  const saved = window.localStorage.getItem("highnoon-difficulty");
+  if (Object.hasOwn(DIFFICULTY_SIMS, saved)) difficulty = saved;
+} catch { /* Private browsing or blocked storage must not prevent a game. */ }
 let gameAnalysis = null;
 let gameAnalysisTimer = null;
 let moveAudio = null;
@@ -59,19 +77,29 @@ let suppressRowClickUntil = 0;
 let stableBest = null;
 let stableSince = 0;
 let activePositionKey = null;
-let setupPhase = 0; // 0: play, 1: choose Red, 2: choose White.
+let setupPhase = 1; // 0: play, 1: choose Red, 2: choose White.
 let setupRed = null;
 let timelineGesture = null;
 let timelineHoverIndex = null;
 let suppressTimelineClickUntil = 0;
 
 function historyPositionKey(index) {
+  if (index < 0) return JSON.stringify([SIDE, "setup", index + 3, index === -1 ? starts[0] : null]);
   return JSON.stringify([SIDE, starts[0], starts[1], history.slice(0, index)]);
 }
 
 function positionKey() {
-  if (setupPhase) return JSON.stringify([SIDE, "setup", setupPhase, setupRed]);
   return historyPositionKey(cursor);
+}
+
+function recordedEndCursor() {
+  return starts.length + history.length - 2;
+}
+
+function restorePosition() {
+  setupPhase = cursor < 0 ? cursor + 3 : 0;
+  setupRed = cursor === -1 ? starts[0] : null;
+  if (!setupPhase) replay(starts[0], starts[1], history, cursor);
 }
 
 function gameText() {
@@ -83,12 +111,13 @@ function loadGameFromUrl() {
   try { text = new URL(window.location.href).searchParams.get("game"); }
   catch { return; }
   if (text === null) return;
+  enterAnalysis();
   $("moves").value = text;
   loadPosition();
 }
 
 async function shareGame() {
-  if (!engine || setupPhase || sharingGame) return;
+  if (!engine || starts.length < 2 || sharingGame) return;
   const text = gameText();
   if ($("moves").value !== text) {
     $("position-error").textContent = "Load the edited game before sharing.";
@@ -109,7 +138,7 @@ async function shareGame() {
   const feedback = (message, manualLink = false) => {
     // A native share sheet can stay open while computer play or editing changes
     // the game. Share the clicked snapshot, without adding stale UI feedback.
-    if (setupPhase || gameText() !== text || $("moves").value !== text) return;
+    if (starts.length < 2 || gameText() !== text || $("moves").value !== text) return;
     $("position-error").textContent = message;
     if (manualLink) {
       $("share-link").value = link;
@@ -137,7 +166,7 @@ async function shareGame() {
     } catch { feedback("Copy the game link below.", true); }
   } finally {
     sharingGame = false;
-    $("share").disabled = !engine || !!setupPhase;
+    $("share").disabled = !engine || starts.length < 2;
   }
 }
 
@@ -237,7 +266,7 @@ function rememberTimelineMargin(key, margin) {
 }
 
 function timelineEstimateAt(index) {
-  if (setupPhase || !Number.isInteger(index) || index < 0 || index > history.length) return null;
+  if (starts.length < 2 || !Number.isInteger(index) || index < 0 || index > history.length) return null;
   const key = historyPositionKey(index);
   const preliminary = preliminaryMargins.get(key);
   if (preliminary && preliminary.exact) return {margin: preliminary.margin, source: "exact"};
@@ -263,18 +292,19 @@ function timelineMarginAt(index) {
 }
 
 function timelinePositionText(index) {
-  const position = index ? `Move ${index}/${history.length}` : "Start";
+  const position = index === -2 ? "Empty board" : `Move ${index + 2}/${recordedEndCursor() + 2}`;
   const estimate = timelineEstimateAt(index);
   return estimate ? `${position} · Red ${signed(estimate.margin)}${isPreliminaryEstimate(estimate) ? " · " + preliminaryEstimateLabel() : ""}` : position;
 }
 
 function updateTimelineLabel(index = cursor) {
-  $("move-number").textContent = setupPhase ? "Start" : timelinePositionText(index);
+  $("move-number").textContent = timelinePositionText(index);
 }
 
 function marginGraphX(index) {
   const {left, right} = MARGIN_GRAPH;
-  return !setupPhase && history.length ? left + index * (right - left) / history.length : (left + right) / 2;
+  const steps = recordedEndCursor() + 2;
+  return steps ? left + (index + 2) * (right - left) / steps : (left + right) / 2;
 }
 
 function marginGraphScale(margins) {
@@ -285,20 +315,26 @@ function marginGraphScale(margins) {
 }
 
 function drawMarginTimeline() {
-  const timeline = $("review"), disabled = !engine || !!setupPhase;
-  const count = setupPhase ? 1 : history.length + 1;
-  const estimates = Array.from({length: count}, (_, index) => timelineEstimateAt(index));
+  if (experience !== "analysis") {
+    $("review").innerHTML = "";
+    $("review").setAttribute("aria-valuetext", "");
+    $("move-number").textContent = "";
+    return;
+  }
+  const timeline = $("review"), disabled = !engine;
+  const count = recordedEndCursor() + 3;
+  const estimates = Array.from({length: count}, (_, step) => timelineEstimateAt(step - 2));
   const margins = estimates.map(estimate => estimate ? estimate.margin : null);
   const {step, limit} = marginGraphScale(margins);
   const {left, right, top, bottom} = MARGIN_GRAPH;
   const zero = (top + bottom) / 2;
   const yAt = margin => zero - margin / limit * (bottom - top) / 2;
-  timeline.max = setupPhase ? 0 : history.length;
-  timeline.value = setupPhase ? 0 : cursor;
+  timeline.max = count - 1;
+  timeline.value = cursor + 2;
   timeline.disabled = disabled;
   timeline.setAttribute("aria-valuemax", timeline.max);
   timeline.setAttribute("aria-valuenow", timeline.value);
-  timeline.setAttribute("aria-valuetext", disabled ? "Start" : timelinePositionText(cursor));
+  timeline.setAttribute("aria-valuetext", timelinePositionText(cursor));
   timeline.setAttribute("aria-disabled", String(disabled));
   timeline.setAttribute("tabindex", disabled ? "-1" : "0");
   timeline.setAttribute("data-range", limit);
@@ -314,8 +350,8 @@ function drawMarginTimeline() {
   }
   const tickCount = Math.min(count, 5);
   for (let tick = 0; tick < tickCount; tick++) {
-    const index = tickCount > 1 ? Math.round(tick * (count - 1) / (tickCount - 1)) : 0;
-    svg += `<text class="margin-axis-label" data-move-tick="${index}" x="${marginGraphX(index).toFixed(3)}" y="170" text-anchor="middle">${index}</text>`;
+    const step = tickCount > 1 ? Math.round(tick * (count - 1) / (tickCount - 1)) : 0;
+    svg += `<text class="margin-axis-label" data-move-tick="${step}" x="${marginGraphX(step - 2).toFixed(3)}" y="170" text-anchor="middle">${step}</text>`;
   }
   if (!disabled) {
     const x = marginGraphX(cursor).toFixed(3);
@@ -323,7 +359,7 @@ function drawMarginTimeline() {
   }
   const lines = {search: "", quick: ""};
   let previousKnown = false, previousStyle = null;
-  const pointAt = index => `${marginGraphX(index).toFixed(3)},${yAt(margins[index]).toFixed(3)}`;
+  const pointAt = step => `${marginGraphX(step - 2).toFixed(3)},${yAt(margins[step]).toFixed(3)}`;
   for (let index = 0; index < count; index++) {
     const known = Number.isFinite(margins[index]);
     if (known) {
@@ -341,17 +377,17 @@ function drawMarginTimeline() {
   }
   if (lines.quick) svg += `<path class="margin-line preliminary" d="${lines.quick}"/>`;
   if (lines.search) svg += `<path class="margin-line" d="${lines.search}"/>`;
-  for (let index = 0; index < count; index++) {
-    const margin = margins[index], x = marginGraphX(index);
+  for (let step = 0; step < count; step++) {
+    const index = step - 2, margin = margins[step], x = marginGraphX(index);
     if (Number.isFinite(margin)) {
       const fill = margin > 0 ? "#ba4238" : margin < 0 ? "#fffdf8" : "#37423a";
-      svg += `<circle class="margin-point${isPreliminaryEstimate(estimates[index]) ? " preliminary" : ""}${index === cursor && !disabled ? " current" : ""}" data-index="${index}" data-source="${estimates[index].source}" cx="${x.toFixed(3)}" cy="${yAt(margin).toFixed(3)}" r="3.5" fill="${fill}"/>`;
+      svg += `<circle class="margin-point${isPreliminaryEstimate(estimates[step]) ? " preliminary" : ""}${index === cursor && !disabled ? " current" : ""}" data-index="${index}" data-source="${estimates[step].source}" cx="${x.toFixed(3)}" cy="${yAt(margin).toFixed(3)}" r="3.5" fill="${fill}"/>`;
     } else {
       // Unknown is an explicit gap, not an invented zero-valued point.
       svg += `<path class="margin-unknown" data-index="${index}" d="M${(x - 2).toFixed(3)},${zero - 2}L${(x + 2).toFixed(3)},${zero + 2}M${(x - 2).toFixed(3)},${zero + 2}L${(x + 2).toFixed(3)},${zero - 2}"/>`;
     }
-    const start = index ? (marginGraphX(index - 1) + x) / 2 : left;
-    const end = index + 1 < count ? (x + marginGraphX(index + 1)) / 2 : right;
+    const start = step ? (marginGraphX(index - 1) + x) / 2 : left;
+    const end = step + 1 < count ? (x + marginGraphX(index + 1)) / 2 : right;
     svg += `<rect class="margin-hit" data-index="${index}" x="${start.toFixed(3)}" y="${top}" width="${(end - start).toFixed(3)}" height="${bottom - top}"><title>${timelinePositionText(index)}</title></rect>`;
   }
   timeline.innerHTML = svg;
@@ -359,6 +395,7 @@ function drawMarginTimeline() {
 }
 
 function cacheSearchResult(key, data) {
+  if (experience !== "analysis" || (data.budgetSims || FIXED_SEARCH_VISITS) !== FIXED_SEARCH_VISITS) return;
   if (!key || (data.type !== "progress" && data.type !== "done")) return;
   const margin = reportMargin(data);
   // Keep the latest estimate even if we leave before this search finishes.
@@ -367,7 +404,7 @@ function cacheSearchResult(key, data) {
     rememberTimelineMargin(key, margin);
     drawMarginTimeline();
   }
-  if (data.type !== "done" || data.stopped || data.capacityReached || !(data.visits >= FIXED_SEARCH_VISITS)) return;
+  if (!searchComplete(data)) return;
   // Cache reports only, never engine instances or trees. Compact maps keep a
   // full game's review history modest; scores and visit counts stay doubles.
   const candidates = data.candidates.map(candidate => Object.freeze({
@@ -405,11 +442,85 @@ function getCachedResult(key) {
 }
 
 $("board-size").textContent = SIDE;
-$("playmode").value = "analysis";
 document.title = "HighNoon";
 // Fit the board and its coordinate labels closely instead of scaling a large
 // invisible border along with every cell.
 board.setAttribute("viewBox", SIDE === 6 ? "10 20 580 513" : "18 26 564 503");
+
+function setView(next) {
+  clearCandidateRowHover();
+  view = experience === "analysis" ? next : "normal";
+  hoverMove = null; hoverRow = null;
+  document.querySelectorAll("[data-view]").forEach(button => {
+    const selected = button.dataset.view === view;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+}
+
+function setDifficulty(next) {
+  if (experience !== "setup" || ["offering", "evaluating"].includes(pieStage) ||
+      !Object.hasOwn(DIFFICULTY_SIMS, next)) return;
+  difficulty = next;
+  try { window.localStorage.setItem("highnoon-difficulty", next); } catch { /* Optional preference. */ }
+  updateExperienceUI();
+}
+
+function canUseBoard() {
+  if (!engine) return false;
+  if (experience === "analysis") return true;
+  if (experience === "setup") return pieStage === "placing" || pieStage === "choosing";
+  return humanSide === engine._hn_stm() && !engine._hn_score(2);
+}
+
+function updateExperienceUI() {
+  const analysis = experience === "analysis", opening = experience === "setup", playing = experience === "play";
+  const settled = engine && !setupPhase && !!engine._hn_score(2);
+  $("workspace").dataset.experience = experience;
+  for (const id of ["view-modes", "candidates-panel", "history-panel", "analysis-controls"])
+    $(id).hidden = !analysis;
+  $("difficulty-modes").hidden = !opening;
+  $("setup-panel").hidden = analysis;
+  $("setup-heading").textContent = playing ? "Players" : "Starting position";
+  const setupInstructions = playing
+    ? `HighNoon is playing ${humanSide === 1 ? "white" : "red"}. You are playing ${humanSide === 1 ? "red" : "white"}.`
+    : pieStage === "offering" ? `HighNoon is placing the ${setupPhase === 1 ? "red" : "white"} starting stack…`
+    : pieStage === "choosing" ? "Choose your color. Red moves first."
+    : pieStage === "evaluating" ? "HighNoon is choosing its color…"
+    : pieStage === "offered" ? "Ready? HighNoon will choose its color."
+    : setupPhase === 2 ? "Now place the white starting stack."
+    : "Place the red starting stack, then the white one. HighNoon will choose which color to play.";
+  if ($("setup-instructions").textContent !== setupInstructions)
+    $("setup-instructions").textContent = setupInstructions;
+  document.querySelectorAll("[data-difficulty]").forEach(button => {
+    const selected = button.dataset.difficulty === difficulty;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
+    button.disabled = !opening || ["offering", "evaluating"].includes(pieStage);
+  });
+  $("game-identity").hidden = experience !== "play";
+  $("game-identity").textContent = humanSide
+    ? `${difficulty[0].toUpperCase() + difficulty.slice(1)} · You are ${humanSide === 1 ? "Red" : "White"}` : "";
+  $("highnoon-offer").hidden = !opening || pieStage !== "placing" || setupPhase !== 1;
+  $("highnoon-offer").disabled = !engine;
+  $("undo-offer").hidden = !opening || !(pieStage === "offered" || pieStage === "placing" && setupPhase === 2);
+  $("undo-offer").disabled = !engine;
+  $("submit-offer").hidden = !opening || pieStage !== "offered";
+  $("submit-offer").disabled = !workerReady;
+  $("color-choices").hidden = !opening || pieStage !== "choosing";
+  $("pick-red").disabled = $("pick-white").disabled = !engine;
+  $("enter-analysis").hidden = false;
+  $("enter-analysis").disabled = !engine || analysis;
+  $("enter-analysis").classList.toggle("mode-indicator", analysis);
+  $("enter-analysis").textContent = analysis ? "Analysis mode"
+    : experience === "play" && !settled ? "End game and analyze" : "Enter analysis mode";
+  $("newgame").disabled = !engine;
+  $("load").disabled = !engine || !analysis;
+  $("moves").readOnly = !analysis;
+  $("moves").placeholder = analysis ? "A1 H5 …" : "Game moves will appear here.";
+  $("position-panel").hidden = false;
+  updateGameAnalysisButton();
+}
 
 function parseCell(text) {
   if (/^(pass|-)$/i.test(text)) return -1;
@@ -488,7 +599,7 @@ function previewMove() {
 }
 
 function previewCandidate() {
-  if (setupPhase) return null;
+  if (experience !== "analysis" || setupPhase) return null;
   const move = previewMove();
   const candidate = result && move !== null ? result.candidates.find(c => c.move === move) || null : null;
   return candidate && (view !== "ownership" || candidate.samples > 0) ? candidate : null;
@@ -497,8 +608,10 @@ function previewCandidate() {
 function movePressActive() { return !!boardGesture || !!rowGesture; }
 
 function updateMarginMarker() {
-  if (!engine || setupPhase) {
+  if (experience !== "analysis" || !engine || setupPhase) {
     $("ownership-marker-value").textContent = "";
+    $("ownership-legend").title = "";
+    $("ownership-legend").setAttribute("aria-label", "");
     return "";
   }
   const retained = timelineEstimateAt(cursor);
@@ -526,6 +639,7 @@ function updateMarginMarker() {
 
 function drawBoard(force = false) {
   if (!engine) return;
+  const analysis = experience === "analysis", interactive = canUseBoard();
   // Only board structure freezes during a press; the marker stays with the graph.
   const legendLabel = updateMarginMarker();
   const placing = setupPhase !== 0;
@@ -537,12 +651,12 @@ function drawBoard(force = false) {
   const selectedMove = previewMove();
   // The prospective stack is known before any search statistics arrive.
   // Preview it read-only without claiming an unsearched conditional map.
-  const ghostLegal = placing ? legalStartCell(selectedMove) : valid(selectedMove) && !engine._hn_score(2) && engine._hn_value(selectedMove) > 0;
+  const ghostLegal = interactive && (placing ? legalStartCell(selectedMove) : valid(selectedMove) && !engine._hn_score(2) && engine._hn_value(selectedMove) > 0);
   const ghostMove = ghostLegal ? selectedMove : null;
   const ownershipPreview = preview && view === "ownership";
   const replyPreview = preview && (view === "visits" || view === "margin");
   // The dashed hint is the root-list Space action, not an opponent's reply.
-  const highlightedMove = !placing && !replyPreview ? firstListedMove() : null;
+  const highlightedMove = analysis && !placing && !replyPreview ? firstListedMove() : null;
   const ownershipOn = !placing && (!!ownershipPreview || view === "ownership");
   // Preserve the played move's preview until genuine new-root samples arrive.
   // It is display-only: inherited visits without samples must not replace it
@@ -557,7 +671,7 @@ function drawBoard(force = false) {
       return values;
     }, []);
   const marginOn = !placing && view === "margin" && !ownershipPreview;
-  const displayedCandidates = placing || settled ? [] : replyPreview ? preview.replyState === 1 ? preview.replies || [] : [] : result ? result.candidates : [];
+  const displayedCandidates = !analysis || placing || settled ? [] : replyPreview ? preview.replyState === 1 ? preview.replies || [] : [] : result ? result.candidates : [];
   const displayedBest = placing ? null : replyPreview ? preview.replyBest : result && result.best;
   const rootSide = result ? result.side : engine._hn_stm();
   const displayedSide = replyPreview ? 3 - rootSide : rootSide;
@@ -569,6 +683,7 @@ function drawBoard(force = false) {
   const rootVisitTotal = result ? result.candidates.reduce((sum, c) => sum + c.visits, 0) : 0;
   const context = $("preview-context");
   context.hidden = !(ownershipPreview || replyPreview);
+  if (context.hidden) context.textContent = "";
   if (!context.hidden) {
     let text = `After ${cellName(preview.move)}`;
     if (replyPreview) {
@@ -581,6 +696,7 @@ function drawBoard(force = false) {
     context.textContent = text;
   }
   let svg = "", mapMargin = map ? 0 : null;
+  const lastMove = cursor > 0 ? history[cursor - 1] : cursor >= -1 ? starts[cursor + 1] : null;
   for (const cell of cells) {
     const [x, y] = xy(cell);
     const ghost = cell === ghostMove;
@@ -589,7 +705,7 @@ function drawBoard(force = false) {
     const territory = placing ? 0 : engine._hn_territory(cell);
     // Reply overlays are annotations only. Every hit target and move action
     // remains legal in the actual root position, never the ghost position.
-    const legal = placing ? legalStartCell(cell) : !engine._hn_score(2) && engine._hn_value(cell) > 0;
+    const legal = interactive && (placing ? legalStartCell(cell) : !engine._hn_score(2) && engine._hn_value(cell) > 0);
     const candidate = marginCandidates.get(cell);
     const loss = marginOn && (replyPreview || legal) && hasBaseline && candidate && candidate.visits > 0 && Number.isFinite(candidate.margin) ? bestCandidate.margin - candidate.margin : null;
     // Higher values favor the player making each displayed move, matching
@@ -608,7 +724,7 @@ function drawBoard(force = false) {
       : ownershipOn && map ? ownershipColor(ownership)
       : territory === 1 ? ownershipColor(1) : territory === 2 ? ownershipColor(-1) : "#e5ddca";
     let title = cellName(cell);
-    if (settled) {
+    if (settled && analysis) {
       title = Number.isFinite(ownership) ? `${((ownership + 1) * 50).toFixed(1)}%` : "";
     } else if (marginOn) {
       title = Number.isFinite(moveMargin) ? signed(moveMargin) : "";
@@ -620,7 +736,7 @@ function drawBoard(force = false) {
     } else if (ownershipOn) {
       title = Number.isFinite(ownership) ? `${((ownership + 1) * 50).toFixed(1)}%` : "";
     }
-    const numericTooltip = !placing && (settled || marginOn || view === "visits" || ownershipOn);
+    const numericTooltip = analysis && !placing && (settled || marginOn || view === "visits" || ownershipOn);
     const accessibleLabel = numericTooltip ? ` aria-label="${cellName(cell)}${title ? " " + title : ""}"` : "";
     svg += `<path class="hex${legal ? " legal" : ""}" data-cell="${cell}"${accessibleLabel} d="${hexPath(x, y)}" fill="${fill}">${title ? `<title>${title}</title>` : ""}</path>`;
     if (own) {
@@ -631,7 +747,7 @@ function drawBoard(force = false) {
       svg += `<text class="stack-number" x="${x}" y="${y}" fill="${own === 2 ? "#454b49" : "#fff"}">${height}</text>`;
     }
     if (territory === 1 || territory === 2) svg += `<g class="territory-lock" data-lock-cell="${cell}" pointer-events="none" transform="translate(${x - radius * .52},${y + radius * .28})"><path d="M-2,-1v-2a2,2 0 0 1 4,0v2" fill="none" stroke="#575e53" stroke-width="1.3"/><rect x="-3" y="-1" width="6" height="5" rx="1" fill="${territory === 1 ? "#ba4238" : "#fffefa"}" stroke="#575e53" stroke-width=".9"/></g>`;
-    if (cursor && cell === history[cursor - 1]) svg += `<path class="last-move" data-last-move="${cell}" d="${hexPath(x, y)}" fill="none" stroke="#ff8c00" stroke-width="3" pointer-events="none"/>`;
+    if (cell === lastMove) svg += `<path class="last-move" data-last-move="${cell}" d="${hexPath(x, y)}" fill="none" stroke="#ff8c00" stroke-width="3" pointer-events="none"/>`;
     if (ghost) svg += `<path d="${hexPath(x, y)}" fill="none" stroke="#00e676" stroke-width="4" pointer-events="none"/>`;
     else if (cell === highlightedMove) svg += `<path class="candidate-recommendation" data-recommended-move="${cell}" d="${hexPath(x, y)}" fill="none" stroke="#bf00ff" stroke-width="3" stroke-dasharray="4,3" pointer-events="none"/>`;
     if (Number.isFinite(moveMargin)) svg += `<text class="margin-loss-number" x="${x}" y="${y + radius * .74}" text-anchor="middle" font-size="9" font-weight="650" fill="#172b1d" pointer-events="none">${signed(moveMargin)}</text>`;
@@ -663,6 +779,7 @@ function drawBoard(force = false) {
     }
   }
   board.innerHTML = svg;
+  if (!analysis) { $("map-caption").textContent = ""; return; }
   if (placing) {
     $("ownership-marker-value").textContent = "";
     $("map-caption").textContent = $("turn-text").textContent;
@@ -698,7 +815,7 @@ if (candidateMotion && typeof candidateMotion.addEventListener === "function")
   });
 
 function firstListedMove() {
-  if (!engine || setupPhase || engine._hn_score(2) || !result) return null;
+  if (experience !== "analysis" || !engine || setupPhase || engine._hn_score(2) || !result) return null;
   const move = renderedCandidateMoves[0];
   return valid(move) && result.candidates.some(candidate => candidate.move === move && candidate.visits > 0) &&
     engine._hn_value(move) > 0 ? move : null;
@@ -709,13 +826,15 @@ function cancelComputerMove() {
   computerMoveTimer = null;
 }
 
-function visitLeadLocked() {
-  if (!searching || !result || result.type !== "progress" ||
-      result.gen !== generation || activePositionKey !== positionKey() ||
-      !Number.isSafeInteger(result.visits) || result.visits < 0 || result.visits > FIXED_SEARCH_VISITS) return false;
+function visitLeadLocked(data) {
+  const budget = data && data.budgetSims || FIXED_SEARCH_VISITS;
+  if (!data || data.stopped || data.capacityReached ||
+      !Number.isSafeInteger(budget) || budget < 1 || budget > FIXED_SEARCH_VISITS ||
+      !Number.isSafeInteger(data.visits) || data.visits < 0 || data.visits > budget ||
+      !Array.isArray(data.candidates)) return false;
   let leader = null, second = 0, total = 0;
-  for (const candidate of result.candidates) {
-    if (!Number.isSafeInteger(candidate.visits) || candidate.visits < 0 || candidate.visits > result.visits) return false;
+  for (const candidate of data.candidates) {
+    if (!Number.isSafeInteger(candidate.visits) || candidate.visits < 0 || candidate.visits > data.visits) return false;
     total += candidate.visits;
     if (!leader || candidate.visits > leader.visits) {
       if (leader) second = leader.visits;
@@ -725,47 +844,55 @@ function visitLeadLocked() {
   // Root visits include inherited work and possibly an initial evaluation
   // with no edge visit. Each remaining simulation can give a rival at most
   // one visit; equality is not enough to guarantee the current first row.
-  const remaining = FIXED_SEARCH_VISITS - result.visits;
-  return total <= result.visits && leader && leader.move === renderedCandidateMoves[0] &&
-    leader.visits > second + remaining;
+  const remaining = budget - data.visits;
+  return !!(total <= data.visits && leader && valid(leader.move) &&
+    leader.visits > second + remaining);
+}
+
+function searchComplete(data) {
+  return !!(data && (data.type === "done" || data.type === "cached") &&
+    !data.stopped && !data.capacityReached && Number.isSafeInteger(data.visits) &&
+    (data.visits >= (data.budgetSims || FIXED_SEARCH_VISITS) || visitLeadLocked(data)));
 }
 
 function computerMoveReady() {
-  const mode = $("playmode").value;
-  const computerSide = mode === "both" && engine ? engine._hn_stm() : mode === "red" ? 1 : mode === "white" ? 2 : 0;
-  // A Load click blurs the textbox before its click handler reads the input.
-  // Keep an unapplied draft intact even after focus has moved to that button.
-  return !!(engine && workerReady && computerSide && !setupPhase && !gameAnalysis &&
+  const computerSide = humanSide ? 3 - humanSide : 0;
+  return !!(experience === "play" && engine && workerReady && computerSide && !setupPhase &&
     cursor === history.length && !movePressActive() && !timelineGesture &&
-    document.activeElement !== $("moves") && $("moves").value === gameText() &&
     !engine._hn_score(2) &&
     computerSide === engine._hn_stm() && result && result.side === computerSide &&
-    !result.stopped && !result.capacityReached &&
-    ((!searching && (result.type === "done" || result.type === "cached") && result.visits >= FIXED_SEARCH_VISITS) ||
-      visitLeadLocked()));
+    result.budgetSims === DIFFICULTY_SIMS[difficulty] &&
+    !searching && searchComplete(result));
+}
+
+function computerMoveChoice() {
+  if (!result || !engine) return null;
+  const first = sortedCandidates(result)[0];
+  return first && valid(first.move) && engine._hn_value(first.move) > 0 ? first.move : null;
 }
 
 function queueComputerMove() {
   cancelComputerMove();
-  if (!computerMoveReady() || firstListedMove() === null) return;
+  if (!computerMoveReady() || computerMoveChoice() === null) return;
   const key = positionKey(), gen = generation;
-  // Defer until the current input/report finishes. Recheck the live position,
-  // mode and displayed rank so neither stale results nor gestures choose a move.
+  const elapsed = computerTurnStartedAt === null ? 0 : performance.now() - computerTurnStartedAt;
+  // A short minimum turn time softens instant replies; longer searches add no
+  // artificial delay. New game and Analysis cancel this pending response.
   computerMoveTimer = setTimeout(() => {
     computerMoveTimer = null;
     if (gen !== generation || key !== positionKey() || !computerMoveReady()) return;
-    const move = firstListedMove();
-    if (move !== null) playMove(move);
-  }, 0);
+    const move = computerMoveChoice();
+    if (move !== null) playMove(move, true);
+  }, Math.max(0, MIN_COMPUTER_RESPONSE_MS - elapsed));
 }
 
 function updateGameAnalysisButton() {
   const button = $("analyze-game");
-  button.disabled = !engine || !workerReady || !!setupPhase;
+  button.disabled = experience !== "analysis" || !engine || !workerReady || starts.length < 2;
   button.textContent = gameAnalysis ? "Stop analysis" : "Analyze game";
   button.setAttribute("aria-pressed", String(!!gameAnalysis));
   button.setAttribute("aria-label", gameAnalysis
-    ? `Stop game analysis at position ${cursor} of ${gameAnalysis.end}` : "Analyze game");
+    ? `Stop game analysis at position ${cursor + 2} of ${gameAnalysis.end + 2}` : "Analyze game");
 }
 
 function stopGameAnalysis() {
@@ -779,12 +906,10 @@ function gameAnalysisPositionReady() {
   if (!gameAnalysis || searching || !engine || setupPhase ||
       movePressActive() || timelineGesture) return false;
   if (engine._hn_score(2)) return true;
-  // A locked visit leader is enough for computer play, but game review needs
-  // the entire budget. A cached completion can have an older worker generation.
-  return !!(result && (result.type === "done" || result.type === "cached") &&
+  // Cached completions can have an older worker generation.
+  return !!(searchComplete(result) &&
     (result.type === "cached" || result.gen === generation) &&
-    result.side === engine._hn_stm() && !result.stopped && !result.capacityReached &&
-    Number.isSafeInteger(result.visits) && result.visits >= FIXED_SEARCH_VISITS);
+    result.side === engine._hn_stm());
 }
 
 function queueGameAnalysis() {
@@ -801,26 +926,26 @@ function queueGameAnalysis() {
 }
 
 function toggleGameAnalysis() {
+  if (experience !== "analysis") return;
   if (gameAnalysis) {
     stopGameAnalysis();
     cancelSearch(false); // Keep the partial display, but invalidate late reports.
     return;
   }
-  if (!engine || !workerReady || setupPhase) return;
+  if (!engine || !workerReady || starts.length < 2) return;
   if ($("moves").value !== gameText()) {
     $("position-error").textContent = "Load the edited game before analyzing it.";
     return;
   }
   cancelTimelineGesture();
   cancelComputerMove();
-  $("playmode").value = "analysis";
   gameAnalysis = {end: history.length};
   updateGameAnalysisButton();
   // Start with the two stacks already placed, not either incomplete setup step.
-  // Refresh even at cursor zero: an interrupted search must finish its budget.
+  // Refresh even at cursor zero: an interrupted search still needs a decision.
   cancelSearch();
   cursor = 0;
-  replay(starts[0], starts[1], history, cursor);
+  restorePosition();
   refreshPosition();
 }
 
@@ -897,6 +1022,11 @@ function renderCandidates(candidates, total, best, hasBaseline) {
 function showResult(data) {
   result = data;
   if (data.samples > 0) carriedOwnership = null;
+  if (experience !== "analysis") {
+    drawBoard();
+    queueComputerMove();
+    return;
+  }
   const total = data.candidates.reduce((sum, c) => sum + c.visits, 0);
   const candidates = sortedCandidates(data);
   if (stableBest !== data.best) { stableBest = data.best; stableSince = data.visits; }
@@ -938,6 +1068,9 @@ function cancelSearch(clear = true) {
 
 function startSearch() {
   if (!engine || !workerReady || setupPhase) return;
+  const purpose = experience === "analysis" ? "analysis" : experience === "play" && humanSide !== engine._hn_stm()
+    ? "play" : experience === "setup" && pieStage === "evaluating" ? "offer" : null;
+  if (!purpose) return;
   const initialOwnership = carriedOwnership && carriedOwnership.key === positionKey() ? carriedOwnership : null;
   cancelSearch();
   carriedOwnership = initialOwnership;
@@ -945,7 +1078,11 @@ function startSearch() {
   if (engine._hn_score(2)) { drawBoard(); return; }
   searching = true;
   activePositionKey = positionKey();
-  worker.postMessage({type: "search", gen: generation, red: starts[0], white: starts[1], moves: history.slice(0, cursor), sims: FIXED_SEARCH_VISITS});
+  activeSearchPurpose = purpose;
+  activeSearchBudget = purpose === "analysis" ? FIXED_SEARCH_VISITS : DIFFICULTY_SIMS[difficulty];
+  worker.postMessage({type: "search", gen: generation, red: starts[0], white: starts[1], moves: history.slice(0, cursor),
+    sims: activeSearchBudget, purpose, context: `${searchSession}:${purpose}:${purpose === "analysis" ? "expert" : difficulty}`,
+    fresh: purpose === "offer" || purpose === "play" && difficulty === "easy"});
 }
 
 function preliminaryMarginEstimate() {
@@ -956,15 +1093,15 @@ function preliminaryMarginEstimate() {
 }
 
 function replay(red, white, moves, length, collectMargins = false) {
-  if (red === CENTRE || white === CENTRE || red < 0 || white < 0 || red === white) throw new Error("Choose two distinct starting cells, excluding the center.");
+  if (!valid(red) || !valid(white) || red === CENTRE || white === CENTRE || red === white) throw new Error("Choose two distinct starting cells, excluding the center.");
   engine._hn_init_display(red, white);
   const estimates = collectMargins ? [preliminaryMarginEstimate()] : null;
   for (let k = 0; k < length; k++) {
     const move = moves[k];
     if (move < 0) {
-      if (engine._hn_can_move()) throw new Error(`Move ${k + 1}: pass is only legal with no available move.`);
+      if (engine._hn_can_move()) throw new Error(`Move ${k + 3}: pass is only legal with no available move.`);
       engine._hn_pass();
-    } else if (!engine._hn_play(move)) throw new Error(`Move ${k + 1} (${cellName(move)}) is illegal.`);
+    } else if (!engine._hn_play(move)) throw new Error(`Move ${k + 3} (${cellName(move)}) is illegal.`);
     if (collectMargins) estimates.push(preliminaryMarginEstimate());
   }
   return estimates;
@@ -992,6 +1129,7 @@ function cancelPreliminarySearch() {
 
 function startLoadedPreliminarySearch() {
   cancelPreliminarySearch();
+  if (experience !== "analysis" || starts.length < 2) return;
   const indices = [];
   for (let index = 0; index <= history.length; index++) {
     const estimate = timelineEstimateAt(index);
@@ -1006,7 +1144,7 @@ function startLoadedPreliminarySearch() {
 
 function acceptPreliminaryMessage(data) {
   const job = preliminaryJob;
-  if (!job || data.token !== job.token || setupPhase ||
+  if (experience !== "analysis" || !job || data.token !== job.token || starts.length < 2 ||
       job.key !== historyPositionKey(history.length)) return;
   if (data.type === "preliminary-done" || data.type === "preliminary-error") {
     preliminaryJob = null; // Leave gaps when a quick search is unavailable.
@@ -1024,22 +1162,26 @@ function acceptPreliminaryMessage(data) {
 }
 
 function refreshPosition(preserveDraft = false) {
+  updateExperienceUI();
   const keepDraft = preserveDraft && $("moves").value !== gameText();
   if (!keepDraft) $("position-error").textContent = "";
   $("analysis-error").textContent = "";
-  $("copy").disabled = !!setupPhase;
-  $("share").disabled = !!setupPhase || sharingGame;
+  $("copy").disabled = starts.length < 2;
+  $("share").disabled = starts.length < 2 || sharingGame;
   $("share-link").hidden = true;
   $("share-link").value = "";
   updateGameAnalysisButton();
   if (setupPhase) {
-    $("turn-text").textContent = setupPhase === 1 ? "Choose Red’s starting cell" : "Choose White’s starting cell";
+    $("turn-text").textContent = pieStage === "offering"
+      ? `HighNoon is placing the ${setupPhase === 1 ? "red" : "white"} starting stack…`
+      : setupPhase === 1 ? "Choose Red’s starting cell" : "Choose White’s starting cell";
     $("turn-stone").hidden = false;
     $("turn-stone").classList.toggle("red", setupPhase === 1);
     $("turn-indicator").classList.toggle("red", setupPhase === 1);
-    $("back").disabled = true; $("forward").disabled = true;
+    $("back").disabled = experience !== "analysis" || cursor <= -2;
+    $("forward").disabled = experience !== "analysis" || cursor >= recordedEndCursor();
     drawMarginTimeline();
-    $("moves").value = setupRed === null ? "" : cellName(setupRed);
+    if (!keepDraft) $("moves").value = gameText();
     drawBoard();
     return;
   }
@@ -1047,19 +1189,27 @@ function refreshPosition(preserveDraft = false) {
   let turnText = redToMove ? "Red to move" : "White to move";
   if (settled) {
     const margin = engine._hn_score(0) - engine._hn_score(1), points = Math.abs(margin);
-    rememberTimelineMargin(positionKey(), margin);
+    if (experience === "analysis") rememberTimelineMargin(positionKey(), margin);
     turnText = `${margin > 0 ? "Red" : "White"} wins by ${points} ${points === 1 ? "point" : "points"}`;
+  } else if (experience === "setup") {
+    turnText = pieStage === "choosing" ? "Choose your color" : pieStage === "evaluating"
+      ? "HighNoon is choosing a color…" : "Ready to offer this position";
+  } else if (experience === "play") {
+    const humanTurn = humanSide === engine._hn_stm();
+    turnText = humanTurn ? `Your turn · ${humanSide === 1 ? "Red" : "White"}`
+      : workerReady ? "HighNoon is thinking…" : "Loading…";
+    if (!humanTurn && computerTurnStartedAt === null) computerTurnStartedAt = performance.now();
   }
-  $("turn-text").textContent = workerReady ? turnText : "Loading…";
-  $("turn-stone").hidden = settled || !workerReady;
+  $("turn-text").textContent = experience !== "analysis" || workerReady ? turnText : "Loading…";
+  $("turn-stone").hidden = settled || experience === "setup";
   $("turn-stone").classList.toggle("red", !settled && redToMove);
   $("turn-indicator").classList.toggle("red", !settled && redToMove);
   drawMarginTimeline();
-  $("back").disabled = !cursor;
-  $("forward").disabled = cursor >= history.length;
+  $("back").disabled = experience !== "analysis" || cursor <= -2;
+  $("forward").disabled = experience !== "analysis" || cursor >= recordedEndCursor();
   if (!keepDraft) $("moves").value = gameText();
   drawBoard();
-  const cached = getCachedResult(positionKey());
+  const cached = experience === "analysis" ? getCachedResult(positionKey()) : null;
   if (cached) {
     cancelSearch();
     stableBest = cached.stableBest; stableSince = cached.stableSince;
@@ -1070,8 +1220,14 @@ function refreshPosition(preserveDraft = false) {
   queueGameAnalysis(); // Exact settled positions do not need a search report.
 }
 
-function newGame(playSetupSound = true) {
-  if (!engine) return;
+function cancelEngineOffering() {
+  if (offeringTimer !== null) clearTimeout(offeringTimer);
+  offeringTimer = null;
+  offeringToken++;
+}
+
+function resetGameState() {
+  cancelEngineOffering();
   cancelPreliminarySearch();
   stopGameAnalysis();
   cancelTimelineGesture();
@@ -1079,40 +1235,132 @@ function newGame(playSetupSound = true) {
   preliminaryMargins.clear();
   marginGraphLimit = MARGIN_GRAPH_MIN;
   cancelSearch();
-  history = []; cursor = 0;
+  searchSession++;
+  computerTurnStartedAt = null;
+  starts = []; history = []; cursor = -2;
   setupRed = null;
-  setupPhase = $("startmode").value === "c" ? 1 : 0;
-  if (!setupPhase) {
-    starts = $("startmode").value === "b" ? balancedStart() : randomStart();
-    engine._hn_init_display(starts[0], starts[1]);
-    if (playSetupSound) { playMoveSound(); playMoveSound(.1); }
-  }
+}
+
+function newGame() {
+  if (!engine) return;
+  resetGameState();
+  experience = "setup"; pieStage = "placing"; humanSide = 0;
+  setupPhase = 1;
+  setView("normal");
   refreshPosition();
 }
 
 function chooseStartCell(cell) {
-  if (!engine || !setupPhase || !legalStartCell(cell)) return;
-  if (setupPhase === 1) {
-    setupRed = cell;
-    setupPhase = 2;
-  } else {
-    const red = setupRed;
-    cancelSearch();
-    starts = [red, cell];
-    setupPhase = 0; setupRed = null;
-    engine._hn_init_display(starts[0], starts[1]);
-  }
+  if (!engine || !setupPhase || !canUseBoard() || !legalStartCell(cell)) return;
+  cancelPreliminarySearch();
+  stopGameAnalysis();
+  cancelTimelineGesture();
+  cancelSearch();
+  searchSession++;
+  // Placing a stack branches here, just like an ordinary move; reviewing it
+  // with Forward instead preserves the recorded continuation.
+  starts = cursor === -2 ? [cell] : [starts[0], cell];
+  history = [];
+  cursor = starts.length - 2;
+  marginHistory.clear(); preliminaryMargins.clear(); marginGraphLimit = MARGIN_GRAPH_MIN;
+  restorePosition();
+  if (experience === "setup" && !setupPhase) pieStage = "offered";
   playMoveSound();
   refreshPosition();
 }
 
 function selectBoardCell(cell) {
+  if (!canUseBoard()) return;
   if (setupPhase) chooseStartCell(cell);
+  else if (experience === "setup" && pieStage === "choosing") {
+    // Choosing Red through the board is an actual move, never a hover/drag.
+    if (valid(cell) && !engine._hn_score(2) && engine._hn_value(cell) > 0) beginPlay(1, cell);
+  }
   else playMove(cell);
 }
 
+function undoOffering() {
+  if (!engine || experience !== "setup" || !["placing", "offered"].includes(pieStage)) return;
+  if (pieStage !== "offered" && setupPhase !== 2) return;
+  starts = starts.slice(0, -1);
+  cursor = starts.length - 2;
+  restorePosition();
+  pieStage = "placing";
+  cancelSearch();
+  refreshPosition();
+}
+
+function makeEngineOffering() {
+  if (!engine || experience !== "setup" || pieStage !== "placing" || setupPhase !== 1) return;
+  resetGameState();
+  const pair = balancedStart(), token = ++offeringToken, session = searchSession;
+  pieStage = "offering";
+  restorePosition();
+  refreshPosition();
+  const schedulePlacement = index => {
+    offeringTimer = setTimeout(() => {
+      if (token !== offeringToken || session !== searchSession || experience !== "setup" ||
+          pieStage !== "offering" || starts.length !== index || cursor !== index - 2) return;
+      offeringTimer = null;
+      starts = [...starts, pair[index]];
+      cursor = starts.length - 2;
+      restorePosition();
+      if (index === 1) pieStage = "choosing";
+      playMoveSound();
+      refreshPosition();
+      if (index === 0) schedulePlacement(1);
+    }, MIN_COMPUTER_RESPONSE_MS);
+  };
+  schedulePlacement(0);
+}
+
+function submitOffering() {
+  if (!engine || !workerReady || experience !== "setup" || pieStage !== "offered" || setupPhase) return;
+  cancelSearch();
+  searchSession++;
+  pieStage = "evaluating";
+  refreshPosition();
+}
+
+function beginPlay(side, firstMove = null) {
+  if (!engine || experience !== "setup" || setupPhase || ![1, 2].includes(side)) return;
+  cancelSearch();
+  searchSession++;
+  computerTurnStartedAt = null;
+  experience = "play"; pieStage = null; humanSide = side;
+  setView("normal");
+  if (firstMove !== null) playMove(firstMove);
+  else refreshPosition();
+}
+
+function pickColor(side) {
+  if (experience === "setup" && pieStage === "choosing") beginPlay(side);
+}
+
+function enterAnalysis() {
+  if (!engine || experience === "analysis") return;
+  cancelEngineOffering();
+  cancelPreliminarySearch();
+  stopGameAnalysis();
+  cancelTimelineGesture();
+  cancelSearch();
+  searchSession++;
+  computerTurnStartedAt = null;
+  experience = "analysis"; pieStage = null; humanSide = 0;
+  setView("ownership");
+  // Conversion is one-way for this game. Keep both its history and current
+  // position; only New game can return to play, starting with a fresh offer.
+  if (!setupPhase) {
+    const estimates = replay(starts[0], starts[1], history, history.length, true);
+    adoptLoadedMargins(starts[0], starts[1], history, estimates);
+    replay(starts[0], starts[1], history, cursor);
+  }
+  refreshPosition();
+  if (!setupPhase && history.length) startLoadedPreliminarySearch();
+}
+
 function loadPosition() {
-  if (!engine) return;
+  if (!engine || experience !== "analysis") return;
   stopGameAnalysis();
   try {
     let red, white;
@@ -1126,7 +1374,17 @@ function loadPosition() {
       moves = position.moves.map(move => parseCell(String(move)));
     } else {
       const coordinates = text.split(/[\s,;]+/).filter(Boolean);
-      if (coordinates.length < 2) throw new Error("Enter Red’s and White’s starting cells first.");
+      if (coordinates.length < 2) {
+        const partialStarts = coordinates.map(parseCell);
+        if (partialStarts.some(cell => !valid(cell) || cell === CENTRE))
+          throw new Error("Choose a starting cell other than the center.");
+        resetGameState();
+        starts = partialStarts;
+        cursor = starts.length - 2;
+        restorePosition();
+        refreshPosition();
+        return;
+      }
       red = parseCell(coordinates[0]); white = parseCell(coordinates[1]);
       moves = coordinates.slice(2).map(parseCell);
     }
@@ -1134,7 +1392,7 @@ function loadPosition() {
     // board if any supplied move is illegal.
     let estimates;
     try { estimates = replay(red, white, moves, moves.length, true); }
-    catch (error) { replay(starts[0], starts[1], history, cursor); throw error; }
+    catch (error) { restorePosition(); throw error; }
     cancelPreliminarySearch();
     cancelSearch();
     setupPhase = 0; setupRed = null;
@@ -1146,8 +1404,10 @@ function loadPosition() {
   } catch (error) { $("position-error").textContent = error.message; }
 }
 
-function playMove(move) {
-  if (!engine || setupPhase || move < 0 || !engine._hn_play(move)) return;
+function playMove(move, byComputer = false) {
+  if (!engine || setupPhase || experience === "setup" || engine._hn_score(2)) return;
+  if (experience === "play" && (byComputer ? humanSide === engine._hn_stm() : humanSide !== engine._hn_stm())) return;
+  if (!valid(move) || !engine._hn_play(move)) return;
   cancelPreliminarySearch();
   stopGameAnalysis();
   playMoveSound();
@@ -1157,22 +1417,23 @@ function playMove(move) {
   const ownership = candidate && candidate.samples > 0 && candidate.ownership
     && cells.some(cell => Number.isFinite(candidate.ownership[cell])) ? candidate.ownership.slice() : null;
   cancelSearch();
+  computerTurnStartedAt = null;
   history = history.slice(0, cursor);
   history.push(move); cursor++;
   if (!engine._hn_score(2) && !engine._hn_can_move()) { engine._hn_pass(); history.push(-1); cursor++; }
-  if (ownership) carriedOwnership = {key: positionKey(), ownership};
+  if (ownership && experience === "analysis") carriedOwnership = {key: positionKey(), ownership};
   refreshPosition();
 }
 
 function reviewAt(next, fromGameAnalysis = false) {
-  if (!engine || setupPhase || !Number.isFinite(next)) return;
+  if (experience !== "analysis" || !engine || !Number.isFinite(next)) return;
   if (!fromGameAnalysis) stopGameAnalysis();
-  next = Math.max(0, Math.min(history.length, Math.round(next)));
+  next = Math.max(-2, Math.min(recordedEndCursor(), Math.round(next)));
   if (next === cursor) return;
   timelineHoverIndex = null;
   cancelSearch();
   cursor = next;
-  replay(starts[0], starts[1], history, cursor);
+  restorePosition();
   refreshPosition();
 }
 
@@ -1204,7 +1465,7 @@ board.addEventListener("pointerleave", event => {
 });
 
 board.addEventListener("pointerdown", event => {
-  if (!["mouse", "touch", "pen"].includes(event.pointerType) || event.isPrimary === false || movePressActive() || timelineGesture || (event.button !== undefined && event.button !== 0)) return;
+  if (!canUseBoard() || !["mouse", "touch", "pen"].includes(event.pointerType) || event.isPrimary === false || movePressActive() || timelineGesture || (event.button !== undefined && event.button !== 0)) return;
   const hex = event.target.closest(".hex.legal");
   if (!hex) return;
   event.preventDefault();
@@ -1232,7 +1493,7 @@ board.addEventListener("pointermove", event => {
     changed = true;
   }
   if (boardGesture.pointerType !== "mouse") {
-    const legal = valid(cell) && (setupPhase ? legalStartCell(cell)
+    const legal = canUseBoard() && valid(cell) && (setupPhase ? legalStartCell(cell)
       : !engine._hn_score(2) && engine._hn_value(cell) > 0);
     const next = legal ? cell : null;
     if (next !== boardGesture.previewCell) changed = true;
@@ -1281,6 +1542,7 @@ function clearCandidateRowHover() {
 }
 
 function previewRowHover(event) {
+  if (experience !== "analysis") return;
   const row = event.target.closest("tr[data-move]");
   if (setupPhase || movePressActive() || !row || event.pointerType === "touch" || event.pointerType === "pen") return;
   $("candidates").classList.toggle("mouse-hover", true);
@@ -1468,22 +1730,19 @@ $("candidates").addEventListener("keydown", event => {
   }
 });
 document.querySelectorAll("[data-view]").forEach(button => button.addEventListener("click", () => {
-  clearCandidateRowHover();
-  view = button.dataset.view; hoverMove = null; hoverRow = null;
-  document.querySelectorAll("[data-view]").forEach(b => { const on = b === button; b.classList.toggle("selected", on); b.setAttribute("aria-pressed", on); });
+  if (experience !== "analysis") return;
+  setView(button.dataset.view);
   drawBoard();
 }));
-$("playmode").addEventListener("change", () => {
-  stopGameAnalysis();
-  queueComputerMove();
-});
+document.querySelectorAll("[data-difficulty]").forEach(button =>
+  button.addEventListener("click", () => setDifficulty(button.dataset.difficulty)));
 $("moves").addEventListener("focus", () => {
-  cancelComputerMove();
+  if (experience === "analysis") cancelComputerMove();
   if (gameAnalysis) { stopGameAnalysis(); cancelSearch(false); }
 });
 $("moves").addEventListener("blur", queueComputerMove);
 $("moves").addEventListener("keydown", event => {
-  if (event.key !== "Enter" || event.defaultPrevented || event.repeat ||
+  if (experience !== "analysis" || event.key !== "Enter" || event.defaultPrevented || event.repeat ||
       event.isComposing || event.keyCode === 229 || event.altKey || event.ctrlKey ||
       event.metaKey || event.shiftKey || !engine || $("load").disabled) return;
   event.preventDefault();
@@ -1492,8 +1751,14 @@ $("moves").addEventListener("keydown", event => {
 $("load").addEventListener("click", () => loadPosition());
 $("analyze-game").addEventListener("click", toggleGameAnalysis);
 $("newgame").addEventListener("click", newGame);
+$("highnoon-offer").addEventListener("click", makeEngineOffering);
+$("undo-offer").addEventListener("click", undoOffering);
+$("submit-offer").addEventListener("click", submitOffering);
+$("pick-red").addEventListener("click", () => pickColor(1));
+$("pick-white").addEventListener("click", () => pickColor(2));
+$("enter-analysis").addEventListener("click", enterAnalysis);
 $("copy").addEventListener("click", async () => {
-  if (setupPhase) return;
+  if (starts.length < 2) return;
   const text = $("moves").value;
   try { await navigator.clipboard.writeText(text); $("position-error").textContent = "Game copied."; }
   catch { $("position-error").textContent = "Clipboard unavailable. Select and copy the move list above."; }
@@ -1502,14 +1767,14 @@ $("share").addEventListener("click", shareGame);
 $("back").addEventListener("click", () => reviewAt(cursor - 1));
 $("forward").addEventListener("click", () => reviewAt(cursor + 1));
 // Keep the input adapter alongside pointer/keyboard navigation for accessibility.
-$("review").addEventListener("input", () => reviewAt(+$("review").value));
+$("review").addEventListener("input", () => reviewAt(+$("review").value - 2));
 
 function reviewIndexAt(event) {
   const bounds = $("review").getBoundingClientRect();
   if (!(bounds.width > 0) || !Number.isFinite(event.clientX)) return cursor;
   const x = (event.clientX - bounds.left) / bounds.width * MARGIN_GRAPH.width;
   const fraction = Math.max(0, Math.min(1, (x - MARGIN_GRAPH.left) / (MARGIN_GRAPH.right - MARGIN_GRAPH.left)));
-  return Math.round(fraction * history.length);
+  return Math.round(fraction * (recordedEndCursor() + 2)) - 2;
 }
 
 function cancelTimelineGesture() {
@@ -1521,7 +1786,7 @@ function cancelTimelineGesture() {
 }
 
 $("review").addEventListener("pointerdown", event => {
-  if (!engine || setupPhase || movePressActive() || timelineGesture || event.isPrimary === false ||
+  if (!engine || experience !== "analysis" || movePressActive() || timelineGesture || event.isPrimary === false ||
       !["mouse", "touch", "pen"].includes(event.pointerType) || (event.button !== undefined && event.button !== 0)) return;
   event.preventDefault();
   timelineHoverIndex = null;
@@ -1535,7 +1800,7 @@ $("review").addEventListener("pointermove", event => {
     event.preventDefault();
     reviewAt(reviewIndexAt(event));
     updateTimelineLabel();
-  } else if (!timelineGesture && event.pointerType === "mouse" && !setupPhase) {
+  } else if (!timelineGesture && event.pointerType === "mouse" && experience === "analysis") {
     timelineHoverIndex = reviewIndexAt(event);
     updateTimelineLabel(timelineHoverIndex);
   }
@@ -1567,7 +1832,7 @@ $("review").addEventListener("click", event => {
 $("review").addEventListener("keydown", event => {
   if (ignoreGameShortcut(event)) return;
   const targets = {ArrowLeft: cursor - 1, ArrowDown: cursor - 1,
-    ArrowRight: cursor + 1, ArrowUp: cursor + 1, Home: 0, End: history.length};
+    ArrowRight: cursor + 1, ArrowUp: cursor + 1, Home: -2, End: recordedEndCursor()};
   if (!(event.key in targets)) return;
   event.preventDefault();
   cancelTimelineGesture();
@@ -1585,7 +1850,7 @@ function ignoreGameShortcut(event) {
 }
 
 document.addEventListener("keydown", event => {
-  if (ignoreGameShortcut(event)) return;
+  if (experience !== "analysis" || ignoreGameShortcut(event)) return;
   if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
     event.preventDefault();
     cancelTimelineGesture();
@@ -1609,47 +1874,81 @@ document.addEventListener("keydown", event => {
   }
 });
 
+function searchFailed(message) {
+  stopGameAnalysis();
+  cancelSearch(false);
+  if (experience === "setup" && pieStage === "evaluating") {
+    pieStage = "offered";
+    refreshPosition();
+  }
+  $("analysis-error").textContent = message;
+}
+
 HN().then(module => {
   engine = module;
   for (const id of ["load", "newgame", "copy", "share"]) $(id).disabled = false;
-  worker = new Worker("search-worker.js?v=20261004-40");
+  worker = new Worker("search-worker.js?v=20261004-47");
   worker.onmessage = event => {
-    const data = event.data;
+    let data = event.data;
     if (["preliminary", "preliminary-done", "preliminary-error"].includes(data.type)) {
       acceptPreliminaryMessage(data);
       return;
     }
     if (data.type === "ready") {
       workerReady = true;
+      updateExperienceUI();
       // Setup is already drawn by the main module. Refreshing it here would
       // erase a game the user is typing into Load while the worker starts.
       if (!setupPhase) refreshPosition(true);
       return;
     }
     if (data.gen !== undefined && data.gen !== generation) return;
+    // A completed snapshot is final even if the worker already queued another
+    // report, or sends its stopped acknowledgment after our early decision.
+    if (data.gen !== undefined && (!searching || activePositionKey !== positionKey())) return;
     if (data.type === "error") {
-      stopGameAnalysis();
-      cancelSearch(false);
-      $("analysis-error").textContent = data.message;
+      searchFailed(data.message);
       return;
     }
     if (data.type === "progress" || data.type === "done") {
       if (setupPhase) return;
-      if (gameAnalysis && (data.side !== engine._hn_stm() ||
-          !Number.isSafeInteger(data.visits) || data.visits < 0)) {
-        stopGameAnalysis();
-        cancelSearch(false);
-        $("analysis-error").textContent = "Analysis could not finish: invalid search result.";
+      if (data.side !== engine._hn_stm() ||
+          !Number.isSafeInteger(data.visits) || data.visits < 0) {
+        searchFailed("Search could not finish: invalid search result.");
+        return;
+      }
+      if (data.budgetSims !== undefined && data.budgetSims !== activeSearchBudget ||
+          data.purpose !== undefined && data.purpose !== activeSearchPurpose) return;
+      data = {...data, budgetSims: activeSearchBudget};
+      if (data.type === "progress" && visitLeadLocked(data)) {
+        // Preserve the report that made the decision. Stopping the worker keeps
+        // its tree available for the next actually played forward move.
+        data = {...data, type: "done"};
+        searching = false;
+        worker.postMessage({type: "stop"});
+      }
+      if (data.type === "done") searching = false;
+      if (activeSearchPurpose === "offer") {
+        // The pie chooser wants the better color, not a move. This private
+        // search never seeds the play tree or the Expert-budget Analysis cache.
+        if (data.type === "done") {
+          if (!searchComplete(data)) searchFailed("The offering could not be evaluated. Please try again.");
+          else {
+            const estimated = reportMargin(data);
+            const redMargin = Number.isFinite(estimated) ? estimated
+              : engine._hn_eval_margin() * (engine._hn_stm() === 1 ? 1 : -1);
+            beginPlay(redMargin >= 0 ? 2 : 1);
+          }
+        }
         return;
       }
       showResult(data);
       cacheSearchResult(activePositionKey, data);
       if (data.type === "done") {
-        searching = false;
-        if (data.capacityReached) $("analysis-error").textContent = "Analysis could not finish: tree capacity reached.";
-        else if (data.stopped || data.visits < FIXED_SEARCH_VISITS) $("analysis-error").textContent = "Analysis stopped before completion.";
-        if (gameAnalysis && (data.visits < FIXED_SEARCH_VISITS ||
-            data.stopped || data.capacityReached)) stopGameAnalysis();
+        activePositionKey = null;
+        if (data.capacityReached) $("analysis-error").textContent = "Search could not finish: tree capacity reached.";
+        else if (!searchComplete(data)) $("analysis-error").textContent = "Search stopped before completion.";
+        if (gameAnalysis && !searchComplete(data)) stopGameAnalysis();
         queueComputerMove();
         queueGameAnalysis();
       }
@@ -1657,9 +1956,9 @@ HN().then(module => {
   };
   worker.onerror = event => {
     cancelPreliminarySearch();
-    stopGameAnalysis();
-    cancelSearch(false);
-    $("analysis-error").textContent = "Search worker error: " + event.message;
+    workerReady = false;
+    searchFailed("Search worker error: " + event.message);
+    updateExperienceUI();
   };
   newGame(false);
   loadGameFromUrl();
