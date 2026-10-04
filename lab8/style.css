@@ -2,9 +2,9 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 body { margin: 0; padding: 24px 30px; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, sans-serif; }
-header { max-width: 1220px; margin: 0 auto 20px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
-h1 { font-size: 25px; letter-spacing: -.6px; margin: 0; }
-header p { margin: 2px 0 0; color: var(--muted); }
+.board-brand { position: absolute; top: 12px; left: 0; z-index: 1; text-align: left; pointer-events: none; }
+.board-brand h1 { font-size: 22px; line-height: 1.25; letter-spacing: -.6px; margin: 0; }
+.board-brand p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
 main { max-width: 1220px; margin: auto; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(370px, 1fr); gap: 28px; align-items: start; }
 .board-panel { position: relative; min-width: 0; text-align: center; }
 .board-tools { display: flex; flex-direction: column; align-items: center; gap: 6px; }
@@ -137,9 +137,6 @@ tr[data-move] { cursor: pointer; }
 #workspace:not([data-experience="analysis"]) .position textarea { background: var(--paper); }
 @media (min-width: 901px) and (orientation: landscape) {
   body { padding: 12px 16px; }
-  header { max-width: none; margin-bottom: 10px; }
-  h1 { font-size: 22px; line-height: 1.25; }
-  header p { font-size: 12px; }
   main { max-width: none; grid-template-columns: minmax(0, 1.45fr) minmax(370px, 1fr); gap: 20px; }
   .board-tools { gap: 4px; }
   .board-surface { padding-top: 4px; }
@@ -155,21 +152,19 @@ tr[data-move] { cursor: pointer; }
 @media (max-width: 900px), (orientation: portrait) {
   body { padding: 15px; }
   main { grid-template-columns: minmax(0, 1fr); gap: 18px; }
-  #workspace[data-experience="setup"], #workspace[data-experience="play"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; grid-template-areas: "setup" "board" "controls"; }
+  #workspace[data-experience="setup"], #workspace[data-experience="play"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; grid-template-areas: "board" "setup" "controls"; }
   .setup-panel { width: 100%; max-width: 650px; margin: 0 auto; }
   .board-panel { width: 100%; max-width: 650px; margin: auto; }
   #board { max-height: none; }
-  header { max-width: 650px; }
   aside { display: flex; flex-direction: column; width: 100%; min-width: 0; max-width: 650px; margin: auto; }
   .card.history-panel { margin-bottom: 14px; }
 }
 @media (orientation: portrait) {
-  .board-panel, .setup-panel, header, aside { max-width: none; }
+  .board-panel, .setup-panel, aside { max-width: none; }
 }
 @media (max-width: 480px) {
   body { padding: 12px 8px; }
-  header { gap: 8px; margin-bottom: 14px; }
-  h1 { font-size: 22px; }
+  .board-brand h1 { font-size: clamp(16px, 4.6vw, 18px); }
   .legend { flex-wrap: wrap; }
   .card { padding: 12px; }
   #review { height: 160px; }

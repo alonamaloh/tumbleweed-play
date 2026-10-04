@@ -4,13 +4,29 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HighNoon</title>
-  <link rel="stylesheet" href="style.css?v=20261004-49">
+  <link rel="stylesheet" href="style.css?v=20261004-50">
 </head>
 <body>
-  <header>
-    <div><h1 id="page-heading">HighNoon</h1><p>Size <span id="board-size">6</span></p></div>
-  </header>
   <main id="workspace" data-experience="setup">
+    <section class="board-panel" aria-label="Game board">
+      <div class="board-tools">
+        <div id="turn-indicator" class="turn-indicator" role="status" aria-live="polite"><span id="turn-stone" class="turn-stone red" aria-hidden="true" hidden></span><span id="turn-text">Loading…</span></div>
+        <div class="board-modes">
+          <div id="view-modes" class="view-modes" role="group" aria-label="Board display" hidden><button data-view="normal" aria-pressed="false">Normal</button><button data-view="ownership" class="selected" aria-pressed="true">Ownership</button><button data-view="visits" aria-pressed="false">Visits</button><button data-view="margin" aria-pressed="false">Margin</button></div>
+          <p id="game-identity" class="game-identity" hidden></p>
+        </div>
+      </div>
+      <div class="board-surface">
+        <header class="board-brand">
+          <h1 id="page-heading">HighNoon</h1><p>Size <span id="board-size">6</span></p>
+        </header>
+        <div id="preview-context" class="preview-context" role="status" aria-live="polite" hidden></div>
+        <svg id="board" viewBox="0 0 600 560" aria-label="Tumbleweed board"></svg>
+      </div>
+      <div id="ownership-legend-row" class="legend" hidden><span class="white-swatch"></span> White <span id="ownership-legend" class="gradient" role="img" aria-label="Expected ownership balance"><span id="ownership-marker-value" aria-hidden="true"></span><span id="ownership-marker" aria-hidden="true"></span></span> Red <span class="red-swatch"></span></div>
+      <div id="margin-loss-legend" class="legend" hidden><span>Margin loss (cells)</span><span class="margin-loss-scale"><span class="margin-loss-gradient"></span><span class="margin-loss-ticks"><span>0</span><span>−5</span><span>≤−10</span></span></span></div>
+      <p id="map-caption" class="visually-hidden" aria-live="polite"></p>
+    </section>
     <section id="setup-panel" class="card setup-panel" aria-labelledby="setup-heading">
       <h2 id="setup-heading">Starting position</h2>
       <div id="difficulty-modes" class="difficulty-modes" role="group" aria-label="Difficulty"><button data-difficulty="easy" aria-pressed="false" disabled>Easy</button><button data-difficulty="medium" class="selected" aria-pressed="true" disabled>Medium</button><button data-difficulty="hard" aria-pressed="false" disabled>Hard</button><button data-difficulty="expert" aria-pressed="false" disabled>Expert</button></div>
@@ -21,22 +37,6 @@
         <button id="submit-offer" class="primary-action" disabled hidden>Offer this position</button>
         <div id="color-choices" class="color-choices" role="group" aria-label="Choose your color" hidden><button id="pick-red" disabled>Pick Red</button><button id="pick-white" disabled>Pick White</button></div>
       </div>
-    </section>
-    <section class="board-panel" aria-label="Game board">
-      <div class="board-tools">
-        <div id="turn-indicator" class="turn-indicator" role="status" aria-live="polite"><span id="turn-stone" class="turn-stone red" aria-hidden="true" hidden></span><span id="turn-text">Loading…</span></div>
-        <div class="board-modes">
-          <div id="view-modes" class="view-modes" role="group" aria-label="Board display" hidden><button data-view="normal" aria-pressed="false">Normal</button><button data-view="ownership" class="selected" aria-pressed="true">Ownership</button><button data-view="visits" aria-pressed="false">Visits</button><button data-view="margin" aria-pressed="false">Margin</button></div>
-          <p id="game-identity" class="game-identity" hidden></p>
-        </div>
-      </div>
-      <div class="board-surface">
-        <div id="preview-context" class="preview-context" role="status" aria-live="polite" hidden></div>
-        <svg id="board" viewBox="0 0 600 560" aria-label="Tumbleweed board"></svg>
-      </div>
-      <div id="ownership-legend-row" class="legend" hidden><span class="white-swatch"></span> White <span id="ownership-legend" class="gradient" role="img" aria-label="Expected ownership balance"><span id="ownership-marker-value" aria-hidden="true"></span><span id="ownership-marker" aria-hidden="true"></span></span> Red <span class="red-swatch"></span></div>
-      <div id="margin-loss-legend" class="legend" hidden><span>Margin loss (cells)</span><span class="margin-loss-scale"><span class="margin-loss-gradient"></span><span class="margin-loss-ticks"><span>0</span><span>−5</span><span>≤−10</span></span></span></div>
-      <p id="map-caption" class="visually-hidden" aria-live="polite"></p>
     </section>
     <aside>
       <section id="position-panel" class="card position" aria-label="Game controls and move history">
@@ -87,7 +87,7 @@
     </aside>
   </main>
   <script src="config.js"></script>
-  <script src="hn.js?v=20261004-49"></script>
-  <script src="app.js?v=20261004-49"></script>
+  <script src="hn.js?v=20261004-50"></script>
+  <script src="app.js?v=20261004-50"></script>
 </body>
 </html>

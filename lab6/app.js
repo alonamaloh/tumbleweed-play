@@ -1723,12 +1723,12 @@ $("load").addEventListener("click", () => loadPosition());
 $("analyze-game").addEventListener("click", toggleGameAnalysis);
 $("newgame").addEventListener("click", () => {
   newGame();
-  // The Play controls sit below the phone board. Return to the new setup only
+  // The Play controls sit below the phone board. Return to the empty board only
   // for this explicit action, never for searches, placements or redraws.
   const compact = Number.isFinite(window.innerWidth) &&
     (window.innerWidth <= 900 || window.innerHeight > window.innerWidth);
-  const setup = $("setup-panel");
-  if (compact && typeof setup.scrollIntoView === "function") setup.scrollIntoView({block: "start"});
+  const workspace = $("workspace");
+  if (compact && typeof workspace.scrollIntoView === "function") workspace.scrollIntoView({block: "start"});
 });
 $("highnoon-offer").addEventListener("click", makeEngineOffering);
 $("undo-offer").addEventListener("click", undoOffering);
@@ -1893,7 +1893,7 @@ function searchFailed(message) {
 HN().then(module => {
   engine = module;
   for (const id of ["load", "newgame", "copy", "share"]) $(id).disabled = false;
-  worker = new Worker("search-worker.js?v=20261004-49");
+  worker = new Worker("search-worker.js?v=20261004-50");
   worker.onmessage = event => {
     let data = event.data;
     if (["preliminary", "preliminary-done", "preliminary-error"].includes(data.type)) {
