@@ -4,13 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HighNoon</title>
-  <link rel="stylesheet" href="style.css?v=20261004-47">
+  <link rel="stylesheet" href="style.css?v=20261004-49">
 </head>
 <body>
   <header>
     <div><h1 id="page-heading">HighNoon</h1><p>Size <span id="board-size">6</span></p></div>
   </header>
   <main id="workspace" data-experience="setup">
+    <section id="setup-panel" class="card setup-panel" aria-labelledby="setup-heading">
+      <h2 id="setup-heading">Starting position</h2>
+      <div id="difficulty-modes" class="difficulty-modes" role="group" aria-label="Difficulty"><button data-difficulty="easy" aria-pressed="false" disabled>Easy</button><button data-difficulty="medium" class="selected" aria-pressed="true" disabled>Medium</button><button data-difficulty="hard" aria-pressed="false" disabled>Hard</button><button data-difficulty="expert" aria-pressed="false" disabled>Expert</button></div>
+      <p id="setup-instructions" aria-live="polite">Place the red starting stack, then the white one. HighNoon will choose which color to play.</p>
+      <div class="offering-controls">
+        <button id="highnoon-offer" class="primary-action" disabled>Let HighNoon place the starting stacks</button>
+        <button id="undo-offer" disabled hidden>Undo placement</button>
+        <button id="submit-offer" class="primary-action" disabled hidden>Offer this position</button>
+        <div id="color-choices" class="color-choices" role="group" aria-label="Choose your color" hidden><button id="pick-red" disabled>Pick Red</button><button id="pick-white" disabled>Pick White</button></div>
+      </div>
+    </section>
     <section class="board-panel" aria-label="Game board">
       <div class="board-tools">
         <div id="turn-indicator" class="turn-indicator" role="status" aria-live="polite"><span id="turn-stone" class="turn-stone red" aria-hidden="true" hidden></span><span id="turn-text">Loading…</span></div>
@@ -37,17 +48,6 @@
         <div class="controls"><button id="copy" disabled>Copy</button><button id="share" disabled>Share link</button><div id="analysis-controls" class="analysis-controls" hidden><button id="load" disabled>Load</button><button id="analyze-game" disabled aria-pressed="false">Analyze game</button></div></div>
         <input id="share-link" type="text" readonly hidden aria-label="Game sharing link">
         <p id="position-error" class="error" role="alert"></p>
-      </section>
-      <section id="setup-panel" class="card setup-panel" aria-labelledby="setup-heading">
-        <h2 id="setup-heading">Starting position</h2>
-        <div id="difficulty-modes" class="difficulty-modes" role="group" aria-label="Difficulty"><button data-difficulty="easy" aria-pressed="false" disabled>Easy</button><button data-difficulty="medium" class="selected" aria-pressed="true" disabled>Medium</button><button data-difficulty="hard" aria-pressed="false" disabled>Hard</button><button data-difficulty="expert" aria-pressed="false" disabled>Expert</button></div>
-        <p id="setup-instructions" aria-live="polite">Place the red starting stack, then the white one. HighNoon will choose which color to play.</p>
-        <div class="offering-controls">
-          <button id="highnoon-offer" class="primary-action" disabled>Let HighNoon place the starting stacks</button>
-          <button id="undo-offer" disabled hidden>Undo placement</button>
-          <button id="submit-offer" class="primary-action" disabled hidden>Offer this position</button>
-          <div id="color-choices" class="color-choices" role="group" aria-label="Choose your color" hidden><button id="pick-red" disabled>Pick Red</button><button id="pick-white" disabled>Pick White</button></div>
-        </div>
       </section>
       <p id="analysis-error" class="small error" role="alert"></p>
       <section id="candidates-panel" class="card candidates" hidden>
@@ -87,7 +87,7 @@
     </aside>
   </main>
   <script src="config.js"></script>
-  <script src="hn.js?v=20261004-47"></script>
-  <script src="app.js?v=20261004-47"></script>
+  <script src="hn.js?v=20261004-49"></script>
+  <script src="app.js?v=20261004-49"></script>
 </body>
 </html>

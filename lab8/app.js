@@ -72,6 +72,7 @@ let hoverMove = null;
 let hoverRow = null;
 let boardGesture = null;
 let rowGesture = null;
+const TOUCH_HOLD_MS = 500;
 let suppressClickUntil = 0;
 let suppressRowClickUntil = 0;
 let stableBest = null;
@@ -591,10 +592,8 @@ function marginLossColor(loss) {
 }
 
 function previewMove() {
-  if (boardGesture) return boardGesture.pointerType === "mouse"
-    ? boardGesture.cancelled ? null : boardGesture.cell : boardGesture.previewCell;
-  if (rowGesture) return rowGesture.pointerType === "mouse"
-    ? rowGesture.cancelled ? null : rowGesture.move : rowGesture.previewMove;
+  if (boardGesture) return !boardGesture.cancelled && (boardGesture.pointerType === "mouse" || boardGesture.held) ? boardGesture.cell : null;
+  if (rowGesture) return !rowGesture.cancelled && (rowGesture.pointerType === "mouse" || rowGesture.held) ? rowGesture.move : null;
   return hoverMove;
 }
 
@@ -786,9 +785,9 @@ function drawBoard(force = false) {
     return;
   }
   if (settled) $("map-caption").textContent = legendLabel;
-  else if (boardGesture && view === "ownership" && !boardGesture.cancelled && !preview) $("map-caption").textContent = `No searched ownership yet for ${cellName(boardGesture.cell)}. Release to play; slide outside to cancel.`;
+  else if (boardGesture && previewMove() !== null && view === "ownership" && !preview) $("map-caption").textContent = `No searched ownership yet for ${cellName(boardGesture.cell)}.`;
   else if (replyPreview) $("map-caption").textContent = context.textContent;
-  else if (ownershipPreview) $("map-caption").textContent = `After ${cellName(preview.move)} · expected margin ${signed(mapMargin)} for Red · ${preview.samples.toLocaleString()} leaf predictions${boardGesture && !boardGesture.cancelled ? " · release to play" : ""}.`;
+  else if (ownershipPreview) $("map-caption").textContent = `After ${cellName(preview.move)} · expected margin ${signed(mapMargin)} for Red · ${preview.samples.toLocaleString()} leaf predictions.`;
   else if (view === "ownership") $("map-caption").textContent = result && result.samples ? `All searched lines · Red ${signed(mapMargin)} cells · ${result.samples.toLocaleString()} leaf predictions.`
     : carriedMap ? `Previous search’s preview · Red ${signed(mapMargin)} cells.` : legendLabel;
   else if (marginOn) $("map-caption").textContent = result ? `Margins for ${displayedSide === 1 ? "Red" : "White"}${hasBaseline ? `; colors show loss relative to ${cellName(displayedBest)}` : ""}.` : "No searched margins yet.";
@@ -1049,10 +1048,12 @@ function cancelSearch(clear = true) {
     boardGesture = null;
     rowGesture = null;
     if (pressedBoard) {
+      clearTouchHold(pressedBoard);
       suppressClickUntil = performance.now() + 800;
       if (board.hasPointerCapture(pressedBoard.pointerId)) board.releasePointerCapture(pressedBoard.pointerId);
     }
     if (pressedRow) {
+      clearTouchHold(pressedRow);
       clearRowPreview(pressedRow);
       suppressRowClickUntil = performance.now() + 800;
       if ($("candidates").hasPointerCapture(pressedRow.pointerId)) $("candidates").releasePointerCapture(pressedRow.pointerId);
@@ -1443,6 +1444,61 @@ function gestureCellAt(event) {
   return hex && board.contains(hex) ? +hex.dataset.cell : null;
 }
 
+// Touch/pen gestures belong to the browser. A stationary hold may preview,
+// but it never captures the pointer or prevents scrolling/pinch zoom.
+function touchMoved(gesture, event) {
+  return gesture.pointerType !== "mouse" &&
+    Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 8;
+}
+
+function clearTouchHold(gesture) {
+  if (gesture.holdTimer !== undefined && gesture.holdTimer !== null) clearTimeout(gesture.holdTimer);
+  gesture.holdTimer = null;
+}
+
+function beginTouchHold(gesture) {
+  if (gesture.pointerType === "mouse") return;
+  gesture.startedAt = performance.now();
+  gesture.holdTimer = setTimeout(() => {
+    gesture.holdTimer = null;
+    if ((gesture !== boardGesture && gesture !== rowGesture) || gesture.cancelled || gesture.key !== positionKey()) return;
+    gesture.held = true;
+    if (gesture.row) {
+      gesture.previewRow = gesture.row;
+      gesture.row.classList.toggle("preview-row", true);
+    }
+    drawBoard(true);
+  }, TOUCH_HOLD_MS);
+}
+
+function shortTap(gesture) {
+  return gesture.pointerType === "mouse" || (!gesture.held && performance.now() - gesture.startedAt < TOUCH_HOLD_MS);
+}
+
+function cancelTouchTap(gesture) {
+  if (!gesture || gesture.pointerType === "mouse") return;
+  clearTouchHold(gesture);
+  gesture.cancelled = true;
+  if (gesture.held) {
+    gesture.held = false;
+    if (gesture.previewRow) clearRowPreview(gesture);
+    drawBoard(true);
+  }
+}
+
+function cancelTouchTaps() {
+  for (const gesture of [boardGesture, rowGesture, timelineGesture])
+    cancelTouchTap(gesture);
+}
+
+document.addEventListener("pointerdown", event => {
+  if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+  for (const gesture of [boardGesture, rowGesture, timelineGesture])
+    if (gesture && gesture.pointerType !== "mouse" && gesture.pointerId !== event.pointerId)
+      cancelTouchTap(gesture);
+}, {capture: true, passive: true});
+document.addEventListener("scroll", cancelTouchTaps, {capture: true, passive: true});
+
 function previewBoardHover(event) {
   if (event.pointerType !== "mouse" || movePressActive()) return;
   const target = document.elementFromPoint(event.clientX, event.clientY);
@@ -1468,52 +1524,43 @@ board.addEventListener("pointerdown", event => {
   if (!canUseBoard() || !["mouse", "touch", "pen"].includes(event.pointerType) || event.isPrimary === false || movePressActive() || timelineGesture || (event.button !== undefined && event.button !== 0)) return;
   const hex = event.target.closest(".hex.legal");
   if (!hex) return;
-  event.preventDefault();
+  if (event.pointerType === "mouse") event.preventDefault();
+  const hadPreview = hoverMove !== null;
   pauseCandidateRowAnimations();
   clearCandidateRowHover();
   hoverMove = null; hoverRow = null;
   suppressClickUntil = 0;
   boardGesture = {pointerId: event.pointerId, pointerType: event.pointerType,
-    cell: +hex.dataset.cell, previewCell: +hex.dataset.cell, cancelled: false,
+    cell: +hex.dataset.cell, cancelled: false, startX: event.clientX, startY: event.clientY,
     key: positionKey()};
-  board.setPointerCapture(event.pointerId);
-  drawBoard(true);
+  if (event.pointerType === "mouse") {
+    board.setPointerCapture(event.pointerId);
+    drawBoard(true);
+  } else if (hadPreview) drawBoard(true);
+  beginTouchHold(boardGesture);
 });
 
-board.addEventListener("pointermove", event => {
+function moveBoardGesture(event) {
   if (event.pointerType === "mouse" && !boardGesture) { previewBoardHover(event); return; }
   if (!boardGesture || event.pointerId !== boardGesture.pointerId) return;
-  event.preventDefault();
+  if (boardGesture.pointerType === "mouse") event.preventDefault();
   const cell = gestureCellAt(event);
-  let changed = false;
-  // Leaving the first cell permanently cancels playing, but touch/pen can
-  // continue browsing read-only previews anywhere on the board.
-  if (!boardGesture.cancelled && cell !== boardGesture.cell) {
-    boardGesture.cancelled = true;
-    changed = true;
+  if (!boardGesture.cancelled && (cell !== boardGesture.cell || touchMoved(boardGesture, event))) {
+    if (boardGesture.pointerType === "mouse") {
+      boardGesture.cancelled = true;
+      drawBoard(true);
+    } else cancelTouchTap(boardGesture);
   }
-  if (boardGesture.pointerType !== "mouse") {
-    const legal = canUseBoard() && valid(cell) && (setupPhase ? legalStartCell(cell)
-      : !engine._hn_score(2) && engine._hn_value(cell) > 0);
-    const next = legal ? cell : null;
-    if (next !== boardGesture.previewCell) changed = true;
-    boardGesture.previewCell = next;
-  }
-  if (changed) drawBoard(true);
-});
-
-// Safari may also deliver native touch events during a pointer gesture.
-// Suppress native panning only during a board or candidate inspection gesture.
-document.addEventListener("touchmove", event => {
-  const gesture = boardGesture || rowGesture || timelineGesture;
-  if (event.cancelable && gesture && gesture.pointerType !== "mouse") event.preventDefault();
-}, {passive: false, capture: true});
+}
+board.addEventListener("pointermove", moveBoardGesture);
 
 function finishBoardGesture(event, cancelled) {
   if (!boardGesture || event.pointerId !== boardGesture.pointerId) return;
-  event.preventDefault();
   const gesture = boardGesture;
-  const play = !cancelled && !gesture.cancelled && gesture.key === positionKey() && gestureCellAt(event) === gesture.cell;
+  if (gesture.pointerType === "mouse") event.preventDefault();
+  const play = !cancelled && !gesture.cancelled && shortTap(gesture) && !touchMoved(gesture, event) &&
+    gesture.key === positionKey() && gestureCellAt(event) === gesture.cell;
+  clearTouchHold(gesture);
   boardGesture = null;
   suppressClickUntil = performance.now() + 800;
   if (board.hasPointerCapture(event.pointerId)) board.releasePointerCapture(event.pointerId);
@@ -1524,7 +1571,7 @@ function finishBoardGesture(event, cancelled) {
 board.addEventListener("pointerup", event => finishBoardGesture(event, false));
 board.addEventListener("pointercancel", event => finishBoardGesture(event, true));
 board.addEventListener("lostpointercapture", event => {
-  if (boardGesture && boardGesture.pointerId === event.pointerId) {
+  if (boardGesture && boardGesture.pointerType === "mouse" && boardGesture.pointerId === event.pointerId) {
     boardGesture = null; suppressClickUntil = performance.now() + 800;
     if (result) showResult(result); else drawBoard();
   }
@@ -1568,131 +1615,55 @@ function insidePressedRow(event) {
   return event.clientX >= bounds.left && event.clientX <= bounds.right && event.clientY >= bounds.top && event.clientY <= bounds.bottom;
 }
 
-function rowAtPointer(gesture) {
-  const bounds = candidatePane.getBoundingClientRect();
-  if (gesture.clientX < bounds.left || gesture.clientX > bounds.right) return null;
-  let y = gesture.clientY;
-  if (y < bounds.top || y > bounds.bottom) {
-    // Probe the visible data edge, not the header or a row hidden by clipping.
-    const data = $("candidates").getBoundingClientRect();
-    const top = Math.max(bounds.top, data.top), bottom = Math.min(bounds.bottom, data.bottom);
-    if (bottom - top < 2) return null;
-    y = Math.max(top + 1, Math.min(bottom - 1, y));
-  }
-  const target = document.elementFromPoint(gesture.clientX, y);
-  const row = target && target.closest("tr[data-move]");
-  return row && $("candidates").contains(row) && result &&
-    result.candidates.some(candidate => candidate.move === +row.dataset.move) ? row : null;
-}
-
-function updateRowPreview(gesture) {
-  const row = rowAtPointer(gesture);
-  const move = row ? +row.dataset.move : null;
-  if (gesture.previewRow === row && gesture.previewMove === move) return;
-  if (gesture.previewRow) gesture.previewRow.classList.toggle("preview-row", false);
-  gesture.previewRow = row; gesture.previewMove = move;
-  if (row) row.classList.toggle("preview-row", true);
-  hoverRow = row; hoverMove = move;
-  drawBoard(true);
-}
-
-function rowScrollSpeed(gesture) {
-  const bounds = candidatePane.getBoundingClientRect();
-  if (gesture.clientX < bounds.left || gesture.clientX > bounds.right ||
-      !(candidatePane.scrollHeight > candidatePane.clientHeight)) return 0;
-  const maxScroll = candidatePane.scrollHeight - candidatePane.clientHeight;
-  // Scroll sizes are rounded but scrollTop can be fractional at either limit.
-  if (gesture.clientY < bounds.top && candidatePane.scrollTop > 1)
-    return -Math.min(480, 120 + 4 * (bounds.top - gesture.clientY));
-  if (gesture.clientY > bounds.bottom && candidatePane.scrollTop < maxScroll - 1)
-    return Math.min(480, 120 + 4 * (gesture.clientY - bounds.bottom));
-  return 0;
-}
-
-function stopRowAutoScroll(gesture) {
-  if (gesture.scrollFrame !== null) cancelAnimationFrame(gesture.scrollFrame);
-  gesture.scrollFrame = null;
-}
-
 function clearRowPreview(gesture) {
-  stopRowAutoScroll(gesture);
   if (gesture.previewRow) gesture.previewRow.classList.toggle("preview-row", false);
-}
-
-function scrollRowGesture(now) {
-  const gesture = rowGesture;
-  if (!gesture || gesture.pointerType === "mouse") return;
-  gesture.scrollFrame = null;
-  if (gesture.key !== positionKey()) return;
-  const speed = rowScrollSpeed(gesture);
-  if (!speed) return;
-  const elapsed = Math.max(0, Math.min(50, now - gesture.lastScrollTime));
-  const maxScroll = candidatePane.scrollHeight - candidatePane.clientHeight;
-  const before = candidatePane.scrollTop;
-  candidatePane.scrollTop = Math.max(0, Math.min(maxScroll, before + speed * elapsed / 1000));
-  if (candidatePane.scrollTop === before) {
-    // The first frame can precede the event timestamp, and fractional steps
-    // can round away. Accumulate time until a scroll step becomes visible.
-    if (rowScrollSpeed(gesture)) gesture.scrollFrame = requestAnimationFrame(scrollRowGesture);
-    return;
-  }
-  gesture.lastScrollTime = now;
-  gesture.cancelled = true; // Scrolling can never turn back into playing.
-  updateRowPreview(gesture); // The finger can remain still as rows move below it.
-  if (rowGesture === gesture && rowScrollSpeed(gesture))
-    gesture.scrollFrame = requestAnimationFrame(scrollRowGesture);
-}
-
-function updateRowAutoScroll(gesture) {
-  if (!rowScrollSpeed(gesture)) { stopRowAutoScroll(gesture); return; }
-  if (gesture.scrollFrame === null) {
-    gesture.lastScrollTime = performance.now();
-    gesture.scrollFrame = requestAnimationFrame(scrollRowGesture);
-  }
 }
 
 $("candidates").addEventListener("pointerdown", event => {
   if (!["mouse", "touch", "pen"].includes(event.pointerType) || event.isPrimary === false || movePressActive() || timelineGesture || (event.button !== undefined && event.button !== 0)) return;
   const row = event.target.closest("tr[data-move]");
   if (!row || !result || !result.candidates.some(candidate => candidate.move === +row.dataset.move)) return;
+  const hadPreview = hoverMove !== null;
   pauseCandidateRowAnimations();
   clearCandidateRowHover();
   suppressRowClickUntil = 0;
-  if (event.pointerType !== "mouse") event.preventDefault();
-  // Captured touch pointers can leave native :hover stuck on the original row.
-  // Only actual mouse use enables it; touch/pen highlighting follows previewRow.
+  // Only mouse use enables highlighting. Touch/pen must leave the browser free
+  // to scroll the list, chain to the page at its ends, or pinch to zoom.
   $("candidates").classList.toggle("mouse-hover", event.pointerType === "mouse");
   rowGesture = {pointerId: event.pointerId, pointerType: event.pointerType,
-    move: +row.dataset.move, row, previewMove: +row.dataset.move, previewRow: row,
-    clientX: event.clientX, clientY: event.clientY, scrollFrame: null,
-    lastScrollTime: 0, key: positionKey(), cancelled: false};
-  $("candidates").setPointerCapture(event.pointerId);
-  hoverMove = rowGesture.move; hoverRow = row;
-  row.classList.toggle("preview-row", true);
-  drawBoard(true);
+    move: +row.dataset.move, row, previewRow: event.pointerType === "mouse" ? row : null,
+    startX: event.clientX, startY: event.clientY, key: positionKey(), cancelled: false};
+  hoverMove = null; hoverRow = null;
+  if (event.pointerType === "mouse") {
+    $("candidates").setPointerCapture(event.pointerId);
+    hoverMove = rowGesture.move; hoverRow = row;
+    row.classList.toggle("preview-row", true);
+    drawBoard(true);
+  } else if (hadPreview) drawBoard(true);
+  beginTouchHold(rowGesture);
 });
 
-$("candidates").addEventListener("pointermove", event => {
+function moveRowGesture(event) {
   if (event.pointerType === "mouse" && !movePressActive()) previewRowHover(event);
   if (!rowGesture || event.pointerId !== rowGesture.pointerId) return;
   const gesture = rowGesture;
-  if (!insidePressedRow(event)) gesture.cancelled = true;
-  if (gesture.pointerType !== "mouse") {
-    event.preventDefault();
-    gesture.clientX = event.clientX; gesture.clientY = event.clientY;
-    updateRowPreview(gesture);
-    updateRowAutoScroll(gesture);
-  } else if (gesture.cancelled && gesture.previewMove !== null) {
-    gesture.previewMove = null; gesture.previewRow.classList.toggle("preview-row", false);
+  if (!insidePressedRow(event) || touchMoved(gesture, event)) {
+    if (gesture.pointerType === "mouse") gesture.cancelled = true;
+    else cancelTouchTap(gesture);
+  }
+  if (gesture.pointerType === "mouse" && gesture.cancelled && gesture.previewRow) {
+    clearRowPreview(gesture); gesture.previewRow = null;
     hoverMove = null; hoverRow = null; drawBoard(true);
   }
-});
+}
+$("candidates").addEventListener("pointermove", moveRowGesture);
 
 function finishRowGesture(event, cancelled) {
   if (!rowGesture || event.pointerId !== rowGesture.pointerId) return;
   const gesture = rowGesture;
-  if (gesture.pointerType !== "mouse") event.preventDefault();
-  const play = !cancelled && !gesture.cancelled && gesture.key === positionKey() && insidePressedRow(event);
+  const play = !cancelled && !gesture.cancelled && shortTap(gesture) && !touchMoved(gesture, event) &&
+    gesture.key === positionKey() && insidePressedRow(event);
+  clearTouchHold(gesture);
   clearRowPreview(gesture);
   rowGesture = null;
   if (!play) { hoverMove = null; hoverRow = null; }
@@ -1705,7 +1676,7 @@ function finishRowGesture(event, cancelled) {
 $("candidates").addEventListener("pointerup", event => finishRowGesture(event, false));
 $("candidates").addEventListener("pointercancel", event => finishRowGesture(event, true));
 $("candidates").addEventListener("lostpointercapture", event => {
-  if (rowGesture && event.pointerId === rowGesture.pointerId) {
+  if (rowGesture && rowGesture.pointerType === "mouse" && event.pointerId === rowGesture.pointerId) {
     clearRowPreview(rowGesture);
     rowGesture = null; suppressRowClickUntil = performance.now() + 800;
     hoverMove = null; hoverRow = null;
@@ -1750,7 +1721,15 @@ $("moves").addEventListener("keydown", event => {
 });
 $("load").addEventListener("click", () => loadPosition());
 $("analyze-game").addEventListener("click", toggleGameAnalysis);
-$("newgame").addEventListener("click", newGame);
+$("newgame").addEventListener("click", () => {
+  newGame();
+  // The Play controls sit below the phone board. Return to the new setup only
+  // for this explicit action, never for searches, placements or redraws.
+  const compact = Number.isFinite(window.innerWidth) &&
+    (window.innerWidth <= 900 || window.innerHeight > window.innerWidth);
+  const setup = $("setup-panel");
+  if (compact && typeof setup.scrollIntoView === "function") setup.scrollIntoView({block: "start"});
+});
 $("highnoon-offer").addEventListener("click", makeEngineOffering);
 $("undo-offer").addEventListener("click", undoOffering);
 $("submit-offer").addEventListener("click", submitOffering);
@@ -1788,34 +1767,45 @@ function cancelTimelineGesture() {
 $("review").addEventListener("pointerdown", event => {
   if (!engine || experience !== "analysis" || movePressActive() || timelineGesture || event.isPrimary === false ||
       !["mouse", "touch", "pen"].includes(event.pointerType) || (event.button !== undefined && event.button !== 0)) return;
-  event.preventDefault();
   timelineHoverIndex = null;
-  timelineGesture = {pointerId: event.pointerId, pointerType: event.pointerType};
-  $("review").setPointerCapture(event.pointerId);
-  reviewAt(reviewIndexAt(event));
+  timelineGesture = {pointerId: event.pointerId, pointerType: event.pointerType,
+    startX: event.clientX, startY: event.clientY, index: reviewIndexAt(event),
+    key: positionKey(), cancelled: false};
+  if (event.pointerType === "mouse") {
+    event.preventDefault();
+    $("review").setPointerCapture(event.pointerId);
+    reviewAt(reviewIndexAt(event));
+  }
   updateTimelineLabel();
 });
-$("review").addEventListener("pointermove", event => {
+function moveTimelineGesture(event) {
   if (timelineGesture && timelineGesture.pointerId === event.pointerId) {
-    event.preventDefault();
-    reviewAt(reviewIndexAt(event));
-    updateTimelineLabel();
+    if (timelineGesture.pointerType === "mouse") {
+      event.preventDefault();
+      reviewAt(reviewIndexAt(event));
+      updateTimelineLabel();
+    } else if (touchMoved(timelineGesture, event)) cancelTouchTap(timelineGesture);
   } else if (!timelineGesture && event.pointerType === "mouse" && experience === "analysis") {
     timelineHoverIndex = reviewIndexAt(event);
     updateTimelineLabel(timelineHoverIndex);
   }
-});
-function finishTimelineGesture(event) {
+}
+$("review").addEventListener("pointermove", moveTimelineGesture);
+function finishTimelineGesture(event, cancelled = false) {
   if (!timelineGesture || timelineGesture.pointerId !== event.pointerId) return;
-  event.preventDefault();
+  const gesture = timelineGesture;
+  if (gesture.pointerType === "mouse") event.preventDefault();
+  const tap = gesture.pointerType !== "mouse" && !cancelled && !gesture.cancelled &&
+    !touchMoved(gesture, event) && gesture.key === positionKey() && reviewIndexAt(event) === gesture.index;
   cancelTimelineGesture();
+  if (tap) reviewAt(gesture.index);
   updateTimelineLabel();
   queueComputerMove();
 }
-$("review").addEventListener("pointerup", finishTimelineGesture);
-$("review").addEventListener("pointercancel", finishTimelineGesture);
+$("review").addEventListener("pointerup", event => finishTimelineGesture(event, false));
+$("review").addEventListener("pointercancel", event => finishTimelineGesture(event, true));
 $("review").addEventListener("lostpointercapture", event => {
-  if (!timelineGesture || timelineGesture.pointerId !== event.pointerId) return;
+  if (!timelineGesture || timelineGesture.pointerType !== "mouse" || timelineGesture.pointerId !== event.pointerId) return;
   cancelTimelineGesture();
   updateTimelineLabel();
   queueComputerMove();
@@ -1840,6 +1830,22 @@ $("review").addEventListener("keydown", event => {
   updateTimelineLabel();
 });
 $("review").addEventListener("contextmenu", event => event.preventDefault());
+
+// Without explicit capture, a pen can finish outside its original element.
+// Passive document fallbacks clean up taps without owning the gesture.
+document.addEventListener("pointermove", event => {
+  if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+  moveBoardGesture(event); moveRowGesture(event); moveTimelineGesture(event);
+}, {passive: true});
+for (const type of ["pointerup", "pointercancel"]) {
+  document.addEventListener(type, event => {
+    if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+    const cancelled = type === "pointercancel";
+    finishBoardGesture(event, cancelled);
+    finishRowGesture(event, cancelled);
+    finishTimelineGesture(event, cancelled);
+  }, {passive: true});
+}
 
 function ignoreGameShortcut(event) {
   if (event.defaultPrevented || event.isComposing || event.keyCode === 229 ||
@@ -1887,7 +1893,7 @@ function searchFailed(message) {
 HN().then(module => {
   engine = module;
   for (const id of ["load", "newgame", "copy", "share"]) $(id).disabled = false;
-  worker = new Worker("search-worker.js?v=20261004-47");
+  worker = new Worker("search-worker.js?v=20261004-49");
   worker.onmessage = event => {
     let data = event.data;
     if (["preliminary", "preliminary-done", "preliminary-error"].includes(data.type)) {
