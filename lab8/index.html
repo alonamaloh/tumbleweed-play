@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HighNoon</title>
-  <link rel="stylesheet" href="style.css?v=20261003-31">
+  <link rel="stylesheet" href="style.css?v=20261004-40">
 </head>
 <body>
   <header>
@@ -34,6 +34,16 @@
       <section class="card candidates">
         <div id="candidate-scroll" class="table-wrap">
           <table aria-label="Candidate moves">
+            <colgroup>
+              <col class="candidate-move-column">
+            </colgroup>
+            <colgroup>
+              <col class="candidate-visits-column">
+              <col class="candidate-share-column">
+            </colgroup>
+            <colgroup>
+              <col class="candidate-margin-column">
+            </colgroup>
             <thead><tr>
               <th scope="col">Move</th>
               <th id="visits-heading" scope="colgroup" colspan="2" aria-sort="descending">
@@ -49,7 +59,8 @@
       </section>
       <section class="card position">
         <textarea id="moves" rows="3" spellcheck="false" aria-label="Move list" placeholder="A1 H5 …"></textarea>
-        <div class="controls"><button id="load" disabled>Load</button><button id="analyze-game" disabled aria-pressed="false">Analyze game</button><button id="copy" disabled>Copy</button></div>
+        <div class="controls"><button id="load" disabled>Load</button><button id="copy" disabled>Copy</button><button id="share" disabled>Share link</button><button id="analyze-game" disabled aria-pressed="false">Analyze game</button></div>
+        <input id="share-link" type="text" readonly hidden aria-label="Game sharing link">
         <p id="position-error" class="error" role="alert"></p>
       </section>
       <section class="card history-panel" aria-label="Game history">
@@ -63,7 +74,7 @@
     </aside>
   </main>
   <script src="config.js"></script>
-  <script src="hn.js?v=20261003-31"></script>
-  <script src="app.js?v=20261003-31"></script>
+  <script src="hn.js?v=20261004-40"></script>
+  <script src="app.js?v=20261004-40"></script>
 </body>
 </html>

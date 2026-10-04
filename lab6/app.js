@@ -13,6 +13,7 @@ const signed = value => Number.isFinite(value) ? (value > 0 ? "+" : "") + value.
 const cells = Array.from({length: N * N}, (_, i) => i).filter(valid);
 const radius = SIDE === 6 ? 27 : 19.5;
 const FIXED_SEARCH_VISITS = ANALYSIS_CONFIG.searchSims || 100000;
+const PRELIMINARY_SEARCH_VISITS = 2000;
 const CANDIDATE_ROW_SLIDE_MS = 360;
 const candidateRowAnimations = new Map();
 const candidateMotion = typeof window !== "undefined" && typeof window.matchMedia === "function"
@@ -22,6 +23,9 @@ const SUMMARY_CACHE_BYTE_LIMIT = 64 * 1024 * 1024;
 const summaryCache = new Map();
 let summaryCacheBytes = 0;
 const marginHistory = new Map();
+const preliminaryMargins = new Map(); // Provisional graph values, never completed searches.
+let preliminaryJob = null;
+let preliminarySequence = 0;
 const MARGIN_HISTORY_LIMIT = 2048;
 const MARGIN_GRAPH = Object.freeze({width: 600, left: 48, right: 584, top: 14, bottom: 150});
 const MARGIN_GRAPH_MIN = 5;
@@ -35,6 +39,7 @@ let history = [];
 let cursor = 0;
 let generation = 0;
 let searching = false;
+let sharingGame = false;
 let computerMoveTimer = null;
 let gameAnalysis = null;
 let gameAnalysisTimer = null;
@@ -71,6 +76,69 @@ function positionKey() {
 
 function gameText() {
   return [...starts, ...history].map(cellName).join(" ");
+}
+
+function loadGameFromUrl() {
+  let text;
+  try { text = new URL(window.location.href).searchParams.get("game"); }
+  catch { return; }
+  if (text === null) return;
+  $("moves").value = text;
+  loadPosition();
+}
+
+async function shareGame() {
+  if (!engine || setupPhase || sharingGame) return;
+  const text = gameText();
+  if ($("moves").value !== text) {
+    $("position-error").textContent = "Load the edited game before sharing.";
+    return;
+  }
+  let url;
+  try {
+    url = new URL(window.location.href);
+    if (!["http:", "https:"].includes(url.protocol))
+      throw new Error("Open this page through HTTP or HTTPS to share a game.");
+    url.searchParams.set("game", text);
+    url.hash = "";
+  } catch (error) {
+    $("position-error").textContent = error.message || "Sharing unavailable for this page.";
+    return;
+  }
+  const link = url.href;
+  const feedback = (message, manualLink = false) => {
+    // A native share sheet can stay open while computer play or editing changes
+    // the game. Share the clicked snapshot, without adding stale UI feedback.
+    if (setupPhase || gameText() !== text || $("moves").value !== text) return;
+    $("position-error").textContent = message;
+    if (manualLink) {
+      $("share-link").value = link;
+      $("share-link").hidden = false;
+    }
+  };
+  sharingGame = true;
+  $("share").disabled = true;
+  $("share-link").hidden = true;
+  $("share-link").value = "";
+  $("position-error").textContent = "";
+  try {
+    if (typeof navigator.share === "function") {
+      try {
+        // Some share targets append text/title to the URL when copying it.
+        await navigator.share({url: link});
+        return;
+      } catch (error) {
+        if (error && error.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(link);
+      feedback("Game link copied.");
+    } catch { feedback("Copy the game link below.", true); }
+  } finally {
+    sharingGame = false;
+    $("share").disabled = !engine || !!setupPhase;
+  }
 }
 
 function prepareMoveSound(event) {
@@ -150,11 +218,13 @@ function ownershipMargin(data) {
 function reportMargin(data) {
   const mean = ownershipMargin(data);
   if (!Number.isFinite(mean)) return null;
-  const best = (data.candidates || []).find(candidate => candidate.move === data.best &&
-    valid(candidate.move) && candidate.visits > 0 && Number.isFinite(candidate.margin));
-  if (!best || (data.side !== 1 && data.side !== 2)) return mean;
-  const bestRedMargin = best.margin * (data.side === 1 ? 1 : -1);
-  return (mean + bestRedMargin) / 2;
+  // Follow the same Visits-ranked child used by the list and move selection,
+  // not the engine's potentially lightly explored highest-margin candidate.
+  const leader = Array.isArray(data.candidates) ? sortedCandidates(data)[0] : null;
+  if (!leader || !valid(leader.move) || !Number.isFinite(leader.visits) ||
+      !Number.isFinite(leader.margin) || (data.side !== 1 && data.side !== 2)) return mean;
+  const leaderRedMargin = leader.margin * (data.side === 1 ? 1 : -1);
+  return (mean + leaderRedMargin) / 2;
 }
 
 function rememberTimelineMargin(key, margin) {
@@ -166,19 +236,36 @@ function rememberTimelineMargin(key, margin) {
     marginHistory.delete(marginHistory.keys().next().value);
 }
 
-function timelineMarginAt(index) {
+function timelineEstimateAt(index) {
   if (setupPhase || !Number.isInteger(index) || index < 0 || index > history.length) return null;
   const key = historyPositionKey(index);
-  if (marginHistory.has(key)) return marginHistory.get(key);
+  const preliminary = preliminaryMargins.get(key);
+  if (preliminary && preliminary.exact) return {margin: preliminary.margin, source: "exact"};
+  if (marginHistory.has(key)) return {margin: marginHistory.get(key), source: "search"};
   // Reading the whole timeline must not promote every summary in the LRU.
   const cached = summaryCache.get(key);
-  return cached && Number.isFinite(cached.margin) ? cached.margin : null;
+  if (cached && Number.isFinite(cached.margin)) return {margin: cached.margin, source: "search"};
+  return preliminary && Number.isFinite(preliminary.margin)
+    ? {margin: preliminary.margin, source: "quick"} : null;
+}
+
+function isPreliminaryEstimate(estimate) {
+  return estimate && estimate.source === "quick";
+}
+
+function preliminaryEstimateLabel() {
+  return `${PRELIMINARY_SEARCH_VISITS}-simulation estimate`;
+}
+
+function timelineMarginAt(index) {
+  const estimate = timelineEstimateAt(index);
+  return estimate ? estimate.margin : null;
 }
 
 function timelinePositionText(index) {
   const position = index ? `Move ${index}/${history.length}` : "Start";
-  const margin = timelineMarginAt(index);
-  return Number.isFinite(margin) ? `${position} · Red ${signed(margin)}` : position;
+  const estimate = timelineEstimateAt(index);
+  return estimate ? `${position} · Red ${signed(estimate.margin)}${isPreliminaryEstimate(estimate) ? " · " + preliminaryEstimateLabel() : ""}` : position;
 }
 
 function updateTimelineLabel(index = cursor) {
@@ -200,7 +287,8 @@ function marginGraphScale(margins) {
 function drawMarginTimeline() {
   const timeline = $("review"), disabled = !engine || !!setupPhase;
   const count = setupPhase ? 1 : history.length + 1;
-  const margins = Array.from({length: count}, (_, index) => timelineMarginAt(index));
+  const estimates = Array.from({length: count}, (_, index) => timelineEstimateAt(index));
+  const margins = estimates.map(estimate => estimate ? estimate.margin : null);
   const {step, limit} = marginGraphScale(margins);
   const {left, right, top, bottom} = MARGIN_GRAPH;
   const zero = (top + bottom) / 2;
@@ -233,18 +321,31 @@ function drawMarginTimeline() {
     const x = marginGraphX(cursor).toFixed(3);
     svg += `<path class="margin-current" data-current="${cursor}" d="M${x},${top}V${bottom}"/>`;
   }
-  let line = "", previousKnown = false;
+  const lines = {search: "", quick: ""};
+  let previousKnown = false, previousStyle = null;
+  const pointAt = index => `${marginGraphX(index).toFixed(3)},${yAt(margins[index]).toFixed(3)}`;
   for (let index = 0; index < count; index++) {
     const known = Number.isFinite(margins[index]);
-    if (known) line += `${previousKnown ? "L" : "M"}${marginGraphX(index).toFixed(3)},${yAt(margins[index]).toFixed(3)}`;
+    if (known) {
+      // An edge is provisional while either endpoint has only a quick estimate.
+      const style = isPreliminaryEstimate(estimates[index]) ||
+        previousKnown && isPreliminaryEstimate(estimates[index - 1]) ? "quick" : "search";
+      if (!previousKnown) lines[style] += `M${pointAt(index)}`;
+      else {
+        if (previousStyle !== style) lines[style] += `M${pointAt(index - 1)}`;
+        lines[style] += `L${pointAt(index)}`;
+      }
+      previousStyle = style;
+    }
     previousKnown = known;
   }
-  if (line) svg += `<path class="margin-line" d="${line}"/>`;
+  if (lines.quick) svg += `<path class="margin-line preliminary" d="${lines.quick}"/>`;
+  if (lines.search) svg += `<path class="margin-line" d="${lines.search}"/>`;
   for (let index = 0; index < count; index++) {
     const margin = margins[index], x = marginGraphX(index);
     if (Number.isFinite(margin)) {
       const fill = margin > 0 ? "#ba4238" : margin < 0 ? "#fffdf8" : "#37423a";
-      svg += `<circle class="margin-point${index === cursor && !disabled ? " current" : ""}" data-index="${index}" cx="${x.toFixed(3)}" cy="${yAt(margin).toFixed(3)}" r="3.5" fill="${fill}"/>`;
+      svg += `<circle class="margin-point${isPreliminaryEstimate(estimates[index]) ? " preliminary" : ""}${index === cursor && !disabled ? " current" : ""}" data-index="${index}" data-source="${estimates[index].source}" cx="${x.toFixed(3)}" cy="${yAt(margin).toFixed(3)}" r="3.5" fill="${fill}"/>`;
     } else {
       // Unknown is an explicit gap, not an invented zero-valued point.
       svg += `<path class="margin-unknown" data-index="${index}" d="M${(x - 2).toFixed(3)},${zero - 2}L${(x + 2).toFixed(3)},${zero + 2}M${(x - 2).toFixed(3)},${zero + 2}L${(x + 2).toFixed(3)},${zero - 2}"/>`;
@@ -400,9 +501,10 @@ function updateMarginMarker() {
     $("ownership-marker-value").textContent = "";
     return "";
   }
-  const retainedMargin = timelineMarginAt(cursor);
+  const retained = timelineEstimateAt(cursor);
+  const retainedMargin = retained ? retained.margin : null;
   // Cached maps use Float32 storage; retain the graph's original scalar precision.
-  const searchedMargin = result && result.type === "cached" && Number.isFinite(retainedMargin)
+  const searchedMargin = result && result.type === "cached" && retained && retained.source === "search"
     ? retainedMargin : reportMargin(result);
   const settled = !!engine._hn_score(2);
   const margin = settled ? engine._hn_score(0) - engine._hn_score(1)
@@ -413,7 +515,9 @@ function updateMarginMarker() {
   $("ownership-marker-value").style.left = `${position}%`;
   $("ownership-marker-value").textContent = signed(margin);
   const source = settled ? "final margin" : Number.isFinite(searchedMargin)
-    ? "blended search estimate" : Number.isFinite(retainedMargin) ? "retained search estimate" : "static ownership estimate";
+    ? "blended search estimate" : Number.isFinite(retainedMargin)
+      ? isPreliminaryEstimate(retained) ? preliminaryEstimateLabel() : retained.source === "exact" ? "final margin" : "retained search estimate"
+      : "static ownership estimate";
   const label = `Red ${signed(margin)} cells · ${source}.`;
   $("ownership-legend").title = label;
   $("ownership-legend").setAttribute("aria-label", label);
@@ -844,22 +948,89 @@ function startSearch() {
   worker.postMessage({type: "search", gen: generation, red: starts[0], white: starts[1], moves: history.slice(0, cursor), sims: FIXED_SEARCH_VISITS});
 }
 
-function replay(red, white, moves, length) {
+function preliminaryMarginEstimate() {
+  if (engine._hn_score(2))
+    return {margin: engine._hn_score(0) - engine._hn_score(1), exact: true};
+  // Leave unsearched graph points empty; static NNUE scores are too noisy.
+  return {margin: null, exact: false};
+}
+
+function replay(red, white, moves, length, collectMargins = false) {
   if (red === CENTRE || white === CENTRE || red < 0 || white < 0 || red === white) throw new Error("Choose two distinct starting cells, excluding the center.");
   engine._hn_init_display(red, white);
+  const estimates = collectMargins ? [preliminaryMarginEstimate()] : null;
   for (let k = 0; k < length; k++) {
     const move = moves[k];
     if (move < 0) {
       if (engine._hn_can_move()) throw new Error(`Move ${k + 1}: pass is only legal with no available move.`);
       engine._hn_pass();
     } else if (!engine._hn_play(move)) throw new Error(`Move ${k + 1} (${cellName(move)}) is illegal.`);
+    if (collectMargins) estimates.push(preliminaryMarginEstimate());
+  }
+  return estimates;
+}
+
+function adoptLoadedMargins(red, white, moves, estimates) {
+  const retained = new Map(marginHistory);
+  marginHistory.clear();
+  preliminaryMargins.clear();
+  marginGraphLimit = MARGIN_GRAPH_MIN;
+  for (let index = 0; index < estimates.length; index++) {
+    const key = JSON.stringify([SIDE, red, white, moves.slice(0, index)]);
+    // Loading the same game must preserve its genuine partial search values.
+    if (retained.has(key)) rememberTimelineMargin(key, retained.get(key));
+    preliminaryMargins.set(key, estimates[index]);
+    while (preliminaryMargins.size > MARGIN_HISTORY_LIMIT)
+      preliminaryMargins.delete(preliminaryMargins.keys().next().value);
   }
 }
 
-function refreshPosition() {
-  $("position-error").textContent = "";
+function cancelPreliminarySearch() {
+  if (preliminaryJob && worker) worker.postMessage({type: "preliminary-stop"});
+  preliminaryJob = null;
+}
+
+function startLoadedPreliminarySearch() {
+  cancelPreliminarySearch();
+  const indices = [];
+  for (let index = 0; index <= history.length; index++) {
+    const estimate = timelineEstimateAt(index);
+    if (!estimate && preliminaryMargins.has(historyPositionKey(index))) indices.push(index);
+  }
+  if (!worker || !indices.length) return;
+  preliminaryJob = {token: ++preliminarySequence, key: historyPositionKey(history.length),
+    red: starts[0], white: starts[1], moves: history.slice(), indices: new Set(indices)};
+  worker.postMessage({type: "preliminary-start", token: preliminaryJob.token,
+    red: starts[0], white: starts[1], moves: history.slice(), indices, sims: PRELIMINARY_SEARCH_VISITS});
+}
+
+function acceptPreliminaryMessage(data) {
+  const job = preliminaryJob;
+  if (!job || data.token !== job.token || setupPhase ||
+      job.key !== historyPositionKey(history.length)) return;
+  if (data.type === "preliminary-done" || data.type === "preliminary-error") {
+    preliminaryJob = null; // Leave gaps when a quick search is unavailable.
+    return;
+  }
+  if (data.type !== "preliminary" || !job.indices.has(data.index) ||
+      !Number.isFinite(data.margin) || (!data.exact && data.visits !== PRELIMINARY_SEARCH_VISITS)) return;
+  const key = JSON.stringify([SIDE, job.red, job.white, job.moves.slice(0, data.index)]);
+  const prior = preliminaryMargins.get(key);
+  if (!prior || prior.exact) return;
+  preliminaryMargins.set(key, {margin: data.margin, exact: !!data.exact, source: "quick"});
+  // Scalar-only updates do not change candidates, samples, autoplay or caches.
+  drawMarginTimeline();
+  updateMarginMarker();
+}
+
+function refreshPosition(preserveDraft = false) {
+  const keepDraft = preserveDraft && $("moves").value !== gameText();
+  if (!keepDraft) $("position-error").textContent = "";
   $("analysis-error").textContent = "";
   $("copy").disabled = !!setupPhase;
+  $("share").disabled = !!setupPhase || sharingGame;
+  $("share-link").hidden = true;
+  $("share-link").value = "";
   updateGameAnalysisButton();
   if (setupPhase) {
     $("turn-text").textContent = setupPhase === 1 ? "Choose Red’s starting cell" : "Choose White’s starting cell";
@@ -886,7 +1057,7 @@ function refreshPosition() {
   drawMarginTimeline();
   $("back").disabled = !cursor;
   $("forward").disabled = cursor >= history.length;
-  $("moves").value = gameText();
+  if (!keepDraft) $("moves").value = gameText();
   drawBoard();
   const cached = getCachedResult(positionKey());
   if (cached) {
@@ -901,9 +1072,11 @@ function refreshPosition() {
 
 function newGame(playSetupSound = true) {
   if (!engine) return;
+  cancelPreliminarySearch();
   stopGameAnalysis();
   cancelTimelineGesture();
   marginHistory.clear();
+  preliminaryMargins.clear();
   marginGraphLimit = MARGIN_GRAPH_MIN;
   cancelSearch();
   history = []; cursor = 0;
@@ -959,20 +1132,23 @@ function loadPosition() {
     }
     // Verify the full input before replacing the review state. Restore the old
     // board if any supplied move is illegal.
-    try { replay(red, white, moves, moves.length); }
+    let estimates;
+    try { estimates = replay(red, white, moves, moves.length, true); }
     catch (error) { replay(starts[0], starts[1], history, cursor); throw error; }
+    cancelPreliminarySearch();
     cancelSearch();
     setupPhase = 0; setupRed = null;
     cancelTimelineGesture();
-    marginHistory.clear();
-    marginGraphLimit = MARGIN_GRAPH_MIN;
+    adoptLoadedMargins(red, white, moves, estimates);
     starts = [red, white]; history = moves; cursor = moves.length;
     refreshPosition();
+    startLoadedPreliminarySearch();
   } catch (error) { $("position-error").textContent = error.message; }
 }
 
 function playMove(move) {
   if (!engine || setupPhase || move < 0 || !engine._hn_play(move)) return;
+  cancelPreliminarySearch();
   stopGameAnalysis();
   playMoveSound();
   // Look up the move actually played, independent of the hover or table sort.
@@ -1322,6 +1498,7 @@ $("copy").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText(text); $("position-error").textContent = "Game copied."; }
   catch { $("position-error").textContent = "Clipboard unavailable. Select and copy the move list above."; }
 });
+$("share").addEventListener("click", shareGame);
 $("back").addEventListener("click", () => reviewAt(cursor - 1));
 $("forward").addEventListener("click", () => reviewAt(cursor + 1));
 // Keep the input adapter alongside pointer/keyboard navigation for accessibility.
@@ -1434,15 +1611,19 @@ document.addEventListener("keydown", event => {
 
 HN().then(module => {
   engine = module;
-  for (const id of ["load", "newgame", "copy"]) $(id).disabled = false;
-  worker = new Worker("search-worker.js?v=20261003-31");
+  for (const id of ["load", "newgame", "copy", "share"]) $(id).disabled = false;
+  worker = new Worker("search-worker.js?v=20261004-40");
   worker.onmessage = event => {
     const data = event.data;
+    if (["preliminary", "preliminary-done", "preliminary-error"].includes(data.type)) {
+      acceptPreliminaryMessage(data);
+      return;
+    }
     if (data.type === "ready") {
       workerReady = true;
       // Setup is already drawn by the main module. Refreshing it here would
       // erase a game the user is typing into Load while the worker starts.
-      if (!setupPhase) refreshPosition();
+      if (!setupPhase) refreshPosition(true);
       return;
     }
     if (data.gen !== undefined && data.gen !== generation) return;
@@ -1475,9 +1656,11 @@ HN().then(module => {
     }
   };
   worker.onerror = event => {
+    cancelPreliminarySearch();
     stopGameAnalysis();
     cancelSearch(false);
     $("analysis-error").textContent = "Search worker error: " + event.message;
   };
   newGame(false);
+  loadGameFromUrl();
 }).catch(error => { $("turn-text").textContent = "Engine failed to load"; $("analysis-error").textContent = String(error.message || error); });

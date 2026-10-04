@@ -2,7 +2,7 @@
 
 // Each short WASM slice returns to the worker event loop. Position changes and
 // Stop can therefore cancel a search without destroying a loaded engine.
-importScripts("config.js", "hn.js?v=20261003-31");
+importScripts("config.js", "hn.js?v=20261004-40");
 let engine = null;
 let active = null;
 let pending = null;
@@ -10,6 +10,108 @@ let timer = null;
 let lastReport = 0;
 let runningSlice = false;
 let position = null;
+// Loaded-history previews use a separate small instance, so they never replace
+// the normal search's retained tree or add invented visits to its budget.
+let preliminaryEngine = null;
+let preliminaryLoading = null;
+let preliminaryActive = null;
+let preliminaryTimer = null;
+const PRELIMINARY_SIMS = 2000;
+const PRELIMINARY_MEMORY_MIB = 16;
+
+function stopPreliminary() {
+  if (preliminaryTimer !== null) clearTimeout(preliminaryTimer);
+  preliminaryTimer = null;
+  preliminaryActive = null;
+  preliminaryEngine = null; // Let the temporary WASM instance be collected.
+}
+
+function schedulePreliminary() {
+  if (!preliminaryActive || preliminaryTimer !== null) return;
+  if (preliminaryEngine) {
+    preliminaryTimer = setTimeout(preliminaryStep, 0);
+    return;
+  }
+  if (preliminaryLoading) return;
+  preliminaryLoading = HN().then(module => {
+    preliminaryLoading = null;
+    if (!preliminaryActive) return;
+    preliminaryEngine = module;
+    schedulePreliminary();
+  }).catch(error => {
+    preliminaryLoading = null;
+    if (preliminaryActive)
+      postMessage({type: "preliminary-error", token: preliminaryActive.token,
+        message: String(error.message || error)});
+    stopPreliminary();
+  });
+}
+
+function preliminaryStep() {
+  preliminaryTimer = null;
+  const job = preliminaryActive, m = preliminaryEngine;
+  if (!job || !m) return;
+  try {
+    const index = job.indices[job.next];
+    if (!job.started) {
+      // Start each prefix independently; inherited visits would change this pass.
+      m._hn_init_search(job.red, job.white, PRELIMINARY_MEMORY_MIB);
+      for (const move of job.moves.slice(0, index)) {
+        if (move < 0) m._hn_pass();
+        else if (!m._hn_play(move)) throw new Error("Illegal move in preliminary position.");
+      }
+      job.started = true;
+      if (!m._hn_score(2)) m._hn_search_start(PRELIMINARY_SIMS);
+    }
+    const exact = !!m._hn_score(2);
+    let margin = exact ? m._hn_score(0) - m._hn_score(1) : null;
+    if (!exact) {
+      // Return to the event loop even on a slow device before another slice.
+      if (m._hn_search_step(PRELIMINARY_SIMS, 10)) {
+        schedulePreliminary();
+        return;
+      }
+      if (m._hn_last(1) === PRELIMINARY_SIMS && m._hn_last(6) === 0 &&
+          !m._hn_last(5) && m._hn_ownership_samples() > 0) {
+        margin = 0;
+        for (let cell = 0; cell < ANALYSIS_CONFIG.cells; cell++) {
+          const ownership = m._hn_ownership(cell);
+          // Off-board cells are NaN; playable cells must be finite.
+          const x = cell % (2 * ANALYSIS_CONFIG.side - 1), y = Math.floor(cell / (2 * ANALYSIS_CONFIG.side - 1));
+          if (Math.abs(x - y) <= ANALYSIS_CONFIG.side - 1) margin += ownership;
+        }
+        let leader = -1, leaderVisits = 0, leaderMove = -1;
+        for (let j = 0; j < m._hn_root_count(); j++) {
+          const visits = m._hn_root_visits(j), move = m._hn_root_move(j);
+          // Tied visit counts use the lower cell index, just like the main list.
+          if (Number.isFinite(visits) && visits > 0 &&
+              (leader < 0 || visits > leaderVisits || visits === leaderVisits && move < leaderMove)) {
+            leader = j; leaderVisits = visits; leaderMove = move;
+          }
+        }
+        if (leader >= 0 && leaderMove >= 0 && leaderMove < ANALYSIS_CONFIG.cells) {
+          const width = 2 * ANALYSIS_CONFIG.side - 1;
+          const playable = Math.abs(leaderMove % width - Math.floor(leaderMove / width)) < ANALYSIS_CONFIG.side;
+          const leaderMargin = m._hn_root_margin(leader);
+          if (playable && Number.isFinite(leaderMargin))
+            margin = (margin + leaderMargin * (m._hn_stm() === 1 ? 1 : -1)) / 2;
+        }
+      }
+    }
+    if (Number.isFinite(margin)) postMessage({type: "preliminary", token: job.token,
+      index, margin, exact, visits: exact ? 0 : PRELIMINARY_SIMS});
+    job.next++;
+    job.started = false;
+    if (job.next < job.indices.length) schedulePreliminary();
+    else {
+      postMessage({type: "preliminary-done", token: job.token});
+      stopPreliminary();
+    }
+  } catch (error) {
+    postMessage({type: "preliminary-error", token: job.token, message: String(error.message || error)});
+    stopPreliminary();
+  }
+}
 
 function rootSnapshot() {
   const m = engine;
@@ -114,7 +216,15 @@ function step() {
 
 self.onmessage = event => {
   const message = event.data;
-  if (message.type === "search") {
+  if (message.type === "preliminary-start") {
+    stopPreliminary();
+    const indices = (message.indices || []).filter(index => Number.isInteger(index) && index >= 0 && index <= message.moves.length).slice(-2048);
+    if (!indices.length) return;
+    preliminaryActive = {...message, indices, next: 0};
+    schedulePreliminary();
+  } else if (message.type === "preliminary-stop") {
+    stopPreliminary();
+  } else if (message.type === "search") {
     pending = message;
     beginPending();
   } else if (message.type === "stop") {
