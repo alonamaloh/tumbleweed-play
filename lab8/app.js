@@ -1425,8 +1425,9 @@ function playMove(move, byComputer = false) {
   refreshPosition();
 }
 
-function reviewAt(next, fromGameAnalysis = false) {
+function reviewAt(next, fromGameAnalysis = false, fromTimelineGesture = false) {
   if (experience !== "analysis" || !engine || !Number.isFinite(next)) return;
+  if (!fromTimelineGesture) cancelTimelineGesture();
   if (!fromGameAnalysis) stopGameAnalysis();
   next = Math.max(-2, Math.min(recordedEndCursor(), Math.round(next)));
   if (next === cursor) return;
@@ -1443,8 +1444,8 @@ function gestureCellAt(event) {
   return hex && board.contains(hex) ? +hex.dataset.cell : null;
 }
 
-// Touch/pen gestures belong to the browser. A stationary hold may preview,
-// but it never captures the pointer or prevents scrolling/pinch zoom.
+// Board/list touch gestures belong to the browser. The graph separately owns
+// horizontal scrubbing, leaving vertical scrolling and pinch zoom native.
 function touchMoved(gesture, event) {
   return gesture.pointerType !== "mouse" &&
     Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 8;
@@ -1476,6 +1477,11 @@ function shortTap(gesture) {
 
 function cancelTouchTap(gesture) {
   if (!gesture || gesture.pointerType === "mouse") return;
+  if (gesture === timelineGesture) {
+    cancelTimelineGesture();
+    updateTimelineLabel();
+    return;
+  }
   clearTouchHold(gesture);
   gesture.cancelled = true;
   if (gesture.held) {
@@ -1485,9 +1491,15 @@ function cancelTouchTap(gesture) {
   }
 }
 
-function cancelTouchTaps() {
-  for (const gesture of [boardGesture, rowGesture, timelineGesture])
+function cancelTouchTaps(event) {
+  for (const gesture of [boardGesture, rowGesture])
     cancelTouchTap(gesture);
+  // Reviewing a position resets the sibling candidate list's scrollTop.
+  // That is not page movement and must not interrupt a graph scrub.
+  const target = event && event.target;
+  if (!target || target === document || target === window ||
+      typeof target.contains === "function" && target.contains($("review")))
+    cancelTouchTap(timelineGesture);
 }
 
 document.addEventListener("pointerdown", event => {
@@ -1761,6 +1773,17 @@ function cancelTimelineGesture() {
   if (!gesture) return;
   suppressTimelineClickUntil = performance.now() + 800;
   if ($("review").hasPointerCapture(gesture.pointerId)) $("review").releasePointerCapture(gesture.pointerId);
+  queueGameAnalysis();
+}
+
+function scrubTimelineAt(event) {
+  const gesture = timelineGesture;
+  if (!gesture || gesture.cancelled) return;
+  if (gesture.key !== positionKey()) { cancelTimelineGesture(); return; }
+  const next = reviewIndexAt(event);
+  if (next !== cursor) reviewAt(next, false, true);
+  if (timelineGesture === gesture) gesture.key = positionKey();
+  updateTimelineLabel();
 }
 
 $("review").addEventListener("pointerdown", event => {
@@ -1769,21 +1792,37 @@ $("review").addEventListener("pointerdown", event => {
   timelineHoverIndex = null;
   timelineGesture = {pointerId: event.pointerId, pointerType: event.pointerType,
     startX: event.clientX, startY: event.clientY, index: reviewIndexAt(event),
-    key: positionKey(), cancelled: false};
+    key: positionKey(), cancelled: false, scrubbing: false, lastMoveEvent: null};
   if (event.pointerType === "mouse") {
     event.preventDefault();
     $("review").setPointerCapture(event.pointerId);
-    reviewAt(reviewIndexAt(event));
+    stopGameAnalysis();
+    scrubTimelineAt(event);
   }
   updateTimelineLabel();
 });
 function moveTimelineGesture(event) {
   if (timelineGesture && timelineGesture.pointerId === event.pointerId) {
-    if (timelineGesture.pointerType === "mouse") {
+    const gesture = timelineGesture;
+    // Touch moves also reach the passive document fallback through bubbling.
+    if (gesture.lastMoveEvent === event) return;
+    gesture.lastMoveEvent = event;
+    if (gesture.pointerType === "mouse") {
       event.preventDefault();
-      reviewAt(reviewIndexAt(event));
-      updateTimelineLabel();
-    } else if (touchMoved(timelineGesture, event)) cancelTouchTap(timelineGesture);
+      scrubTimelineAt(event);
+    } else {
+      if (gesture.cancelled || gesture.key !== positionKey()) { cancelTimelineGesture(); return; }
+      if (!gesture.scrubbing) {
+        if (!touchMoved(gesture, event)) return;
+        const dx = Math.abs(event.clientX - gesture.startX), dy = Math.abs(event.clientY - gesture.startY);
+        if (dy >= dx) { cancelTouchTap(gesture); return; }
+        gesture.scrubbing = true;
+        stopGameAnalysis();
+        $("review").setPointerCapture(event.pointerId);
+      }
+      // CSS pan-y pinch-zoom, not preventDefault, keeps native scrolling free.
+      scrubTimelineAt(event);
+    }
   } else if (!timelineGesture && event.pointerType === "mouse" && experience === "analysis") {
     timelineHoverIndex = reviewIndexAt(event);
     updateTimelineLabel(timelineHoverIndex);
@@ -1794,8 +1833,9 @@ function finishTimelineGesture(event, cancelled = false) {
   if (!timelineGesture || timelineGesture.pointerId !== event.pointerId) return;
   const gesture = timelineGesture;
   if (gesture.pointerType === "mouse") event.preventDefault();
-  const tap = gesture.pointerType !== "mouse" && !cancelled && !gesture.cancelled &&
+  const tap = gesture.pointerType !== "mouse" && !gesture.scrubbing && !cancelled && !gesture.cancelled &&
     !touchMoved(gesture, event) && gesture.key === positionKey() && reviewIndexAt(event) === gesture.index;
+  if (gesture.scrubbing && !cancelled) scrubTimelineAt(event);
   cancelTimelineGesture();
   if (tap) reviewAt(gesture.index);
   updateTimelineLabel();
@@ -1804,7 +1844,10 @@ function finishTimelineGesture(event, cancelled = false) {
 $("review").addEventListener("pointerup", event => finishTimelineGesture(event, false));
 $("review").addEventListener("pointercancel", event => finishTimelineGesture(event, true));
 $("review").addEventListener("lostpointercapture", event => {
-  if (!timelineGesture || timelineGesture.pointerType !== "mouse" || timelineGesture.pointerId !== event.pointerId) return;
+  // Promoting an SVG child's implicit touch capture to the stable graph emits
+  // a bubbling loss for the child first; only loss of our own capture ends it.
+  if (event.target !== $("review") || !timelineGesture || timelineGesture.pointerId !== event.pointerId ||
+      timelineGesture.pointerType !== "mouse" && !timelineGesture.scrubbing) return;
   cancelTimelineGesture();
   updateTimelineLabel();
   queueComputerMove();
@@ -1892,7 +1935,7 @@ function searchFailed(message) {
 HN().then(module => {
   engine = module;
   for (const id of ["load", "newgame", "copy", "share"]) $(id).disabled = false;
-  worker = new Worker("search-worker.js?v=20261004-51");
+  worker = new Worker("search-worker.js?v=20261004-52");
   worker.onmessage = event => {
     let data = event.data;
     if (["preliminary", "preliminary-done", "preliminary-error"].includes(data.type)) {
