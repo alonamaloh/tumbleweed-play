@@ -133,6 +133,7 @@ tr[data-move] { cursor: pointer; }
 #analysis-error:empty { display: none; }
 /* Play keeps the board dominant; Analysis retains the full diagnostic layout. */
 #workspace[data-experience="setup"], #workspace[data-experience="play"] { grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); grid-template-rows: auto 1fr; grid-template-areas: "board setup" "board controls"; }
+#workspace[data-experience="play"] { grid-template-rows: 1fr; grid-template-areas: "board controls"; }
 #workspace[data-experience="setup"] .board-panel, #workspace[data-experience="play"] .board-panel { grid-area: board; }
 #workspace[data-experience="setup"] .setup-panel, #workspace[data-experience="play"] .setup-panel { grid-area: setup; align-self: start; margin-bottom: 0; }
 #workspace[data-experience="setup"] aside, #workspace[data-experience="play"] aside { grid-area: controls; align-self: end; min-height: 0; }
@@ -155,6 +156,7 @@ tr[data-move] { cursor: pointer; }
   body { padding: 15px; }
   main { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   #workspace[data-experience="setup"], #workspace[data-experience="play"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; grid-template-areas: "board" "setup" "controls"; }
+  #workspace[data-experience="play"] { grid-template-rows: auto auto; grid-template-areas: "board" "controls"; }
   .setup-panel { width: 100%; max-width: 650px; margin: 0 auto; }
   .board-panel { width: 100%; max-width: 650px; margin: auto; }
   #board { max-height: none; }
@@ -163,6 +165,9 @@ tr[data-move] { cursor: pointer; }
 }
 @media (orientation: portrait) {
   .board-panel, .setup-panel, aside { max-width: none; }
+}
+@media (max-width: 600px) and (orientation: portrait) {
+  #workspace[data-experience="analysis"] .history-panel { order: -1; }
 }
 @media (max-width: 480px) {
   body { padding: 12px 8px; }

@@ -482,10 +482,9 @@ function updateExperienceUI() {
   for (const id of ["view-modes", "candidates-panel", "history-panel", "analysis-controls"])
     $(id).hidden = !analysis;
   $("difficulty-modes").hidden = !opening;
-  $("setup-panel").hidden = analysis;
-  $("setup-heading").textContent = playing ? "Players" : "Starting position";
-  const setupInstructions = playing
-    ? `HighNoon is playing ${humanSide === 1 ? "white" : "red"}. You are playing ${humanSide === 1 ? "red" : "white"}.`
+  $("setup-panel").hidden = !opening;
+  $("setup-heading").textContent = "Starting position";
+  const setupInstructions = !opening ? ""
     : pieStage === "offering" ? `HighNoon is placing the ${setupPhase === 1 ? "red" : "white"} starting stack…`
     : pieStage === "choosing" ? "Choose your color. Red moves first."
     : pieStage === "evaluating" ? "HighNoon is choosing its color…"
@@ -1982,7 +1981,7 @@ function searchFailed(message) {
 HN().then(module => {
   engine = module;
   for (const id of ["load", "newgame", "copy", "share"]) $(id).disabled = false;
-  worker = new Worker("search-worker.js?v=20261004-53");
+  worker = new Worker("search-worker.js?v=20261004-54");
   worker.onmessage = event => {
     let data = event.data;
     if (["preliminary", "preliminary-done", "preliminary-error"].includes(data.type)) {
