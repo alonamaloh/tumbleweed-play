@@ -81,6 +81,7 @@ let activePositionKey = null;
 let setupPhase = 1; // 0: play, 1: choose Red, 2: choose White.
 let setupRed = null;
 let timelineGesture = null;
+let timelineTouch = null;
 let timelineHoverIndex = null;
 let suppressTimelineClickUntil = 0;
 
@@ -1498,8 +1499,10 @@ function cancelTouchTaps(event) {
   // That is not page movement and must not interrupt a graph scrub.
   const target = event && event.target;
   if (!target || target === document || target === window ||
-      typeof target.contains === "function" && target.contains($("review")))
+      typeof target.contains === "function" && target.contains($("review"))) {
     cancelTouchTap(timelineGesture);
+    timelineTouch = null;
+  }
 }
 
 document.addEventListener("pointerdown", event => {
@@ -1769,7 +1772,7 @@ function reviewIndexAt(event) {
 
 function cancelTimelineGesture() {
   const gesture = timelineGesture;
-  timelineGesture = null; timelineHoverIndex = null;
+  timelineGesture = null; timelineTouch = null; timelineHoverIndex = null;
   if (!gesture) return;
   suppressTimelineClickUntil = performance.now() + 800;
   if ($("review").hasPointerCapture(gesture.pointerId)) $("review").releasePointerCapture(gesture.pointerId);
@@ -1785,6 +1788,48 @@ function scrubTimelineAt(event) {
   if (timelineGesture === gesture) gesture.key = positionKey();
   updateTimelineLabel();
 }
+
+function timelineTouchAxis(contact) {
+  if (!timelineTouch) return null;
+  if (!timelineTouch.axis) {
+    const dx = Math.abs(contact.clientX - timelineTouch.startX);
+    const dy = Math.abs(contact.clientY - timelineTouch.startY);
+    if (dx || dy) timelineTouch.axis = dx > dy ? "x" : "y";
+  }
+  return timelineTouch.axis;
+}
+
+// Safari can start native vertical scrolling even after a pan-y gesture began
+// horizontally. Claim its first horizontal touchmove before that can happen;
+// the larger pointer threshold below still protects taps from jitter.
+$("review").addEventListener("touchstart", event => {
+  if (event.touches.length !== 1) { cancelTimelineGesture(); return; }
+  if (!engine || experience !== "analysis" || movePressActive() ||
+      timelineGesture && timelineGesture.pointerType !== "touch") return;
+  const touch = event.touches[0];
+  timelineTouch = {identifier: touch.identifier, startX: touch.clientX,
+    startY: touch.clientY, axis: null};
+}, {passive: true});
+$("review").addEventListener("touchmove", event => {
+  if (!timelineTouch || !timelineGesture || timelineGesture.pointerType !== "touch") return;
+  if (event.touches.length !== 1 || event.touches[0].identifier !== timelineTouch.identifier) {
+    cancelTimelineGesture(); return;
+  }
+  if (timelineTouchAxis(event.touches[0]) !== "x") return;
+  if (!event.cancelable) { cancelTimelineGesture(); return; }
+  event.preventDefault();
+}, {passive: false});
+$("review").addEventListener("touchend", () => { timelineTouch = null; }, {passive: true});
+$("review").addEventListener("touchcancel", () => {
+  cancelTimelineGesture();
+  updateTimelineLabel();
+}, {passive: true});
+// A second finger can land outside the graph. Release our single-touch lock
+// without interfering with the browser's multi-touch handling.
+document.addEventListener("touchstart", event => {
+  if (event.touches.length > 1 &&
+      (timelineTouch || timelineGesture && timelineGesture.pointerType === "touch")) cancelTimelineGesture();
+}, {capture: true, passive: true});
 
 $("review").addEventListener("pointerdown", event => {
   if (!engine || experience !== "analysis" || movePressActive() || timelineGesture || event.isPrimary === false ||
@@ -1813,14 +1858,16 @@ function moveTimelineGesture(event) {
     } else {
       if (gesture.cancelled || gesture.key !== positionKey()) { cancelTimelineGesture(); return; }
       if (!gesture.scrubbing) {
+        const axis = gesture.pointerType === "touch" ? timelineTouchAxis(event) : null;
         if (!touchMoved(gesture, event)) return;
         const dx = Math.abs(event.clientX - gesture.startX), dy = Math.abs(event.clientY - gesture.startY);
-        if (dy >= dx) { cancelTouchTap(gesture); return; }
+        if (axis === "y" || !axis && dy >= dx) { cancelTouchTap(gesture); return; }
+        if (axis === "x" && dx <= 8) return;
         gesture.scrubbing = true;
         stopGameAnalysis();
         $("review").setPointerCapture(event.pointerId);
       }
-      // CSS pan-y pinch-zoom, not preventDefault, keeps native scrolling free.
+      // Only the graph's horizontal TouchEvent guard suppresses native scroll.
       scrubTimelineAt(event);
     }
   } else if (!timelineGesture && event.pointerType === "mouse" && experience === "analysis") {
@@ -1935,7 +1982,7 @@ function searchFailed(message) {
 HN().then(module => {
   engine = module;
   for (const id of ["load", "newgame", "copy", "share"]) $(id).disabled = false;
-  worker = new Worker("search-worker.js?v=20261004-52");
+  worker = new Worker("search-worker.js?v=20261004-53");
   worker.onmessage = event => {
     let data = event.data;
     if (["preliminary", "preliminary-done", "preliminary-error"].includes(data.type)) {
