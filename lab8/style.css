@@ -172,6 +172,7 @@ tr[data-move] { cursor: pointer; }
 @media (max-width: 480px) {
   body { padding: 12px 8px; }
   .board-brand h1 { font-size: clamp(16px, 4.6vw, 18px); }
+  .board-brand p { max-width: 68px; font-size: 11px; line-height: 1.1; }
   .legend { flex-wrap: wrap; }
   .card { padding: 12px; }
   #review { height: 160px; }

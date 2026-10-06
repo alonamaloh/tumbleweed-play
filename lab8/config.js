@@ -2,7 +2,7 @@
 const ANALYSIS_CONFIG = {
   side: 8,
   cells: 225,
-  model: "mc8own",
+  model: "mc8l06",
   searchSims: 100000,
   treeMemoryMiB: 256,
   // The size-8 alpha-beta page's searched offerings, before a random symmetry.

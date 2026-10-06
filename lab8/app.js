@@ -443,7 +443,7 @@ function getCachedResult(key) {
   return cached;
 }
 
-$("board-subtitle").textContent = `Size ${SIDE}`;
+$("board-subtitle").textContent = `Size ${SIDE} · ${ANALYSIS_CONFIG.model}`;
 document.title = "HighNoon";
 // Fit the board and its coordinate labels closely instead of scaling a large
 // invisible border along with every cell.
@@ -499,8 +499,8 @@ function updateExperienceUI() {
     button.setAttribute("aria-pressed", String(selected));
     button.disabled = !opening || ["offering", "evaluating"].includes(pieStage);
   });
-  $("board-subtitle").textContent = playing
-    ? difficulty[0].toUpperCase() + difficulty.slice(1) : `Size ${SIDE}`;
+  const boardLabel = playing ? difficulty[0].toUpperCase() + difficulty.slice(1) : `Size ${SIDE}`;
+  $("board-subtitle").textContent = `${boardLabel} · ${ANALYSIS_CONFIG.model}`;
   $("highnoon-offer").hidden = !opening || pieStage !== "placing" || setupPhase !== 1;
   $("highnoon-offer").disabled = !engine;
   $("undo-offer").hidden = !opening || !(pieStage === "offered" || pieStage === "placing" && setupPhase === 2);
@@ -1981,7 +1981,7 @@ function searchFailed(message) {
 HN().then(module => {
   engine = module;
   for (const id of ["load", "newgame", "copy", "share"]) $(id).disabled = false;
-  worker = new Worker("search-worker.js?v=20261004-54");
+  worker = new Worker("search-worker.js?v=20261005-55");
   worker.onmessage = event => {
     let data = event.data;
     if (["preliminary", "preliminary-done", "preliminary-error"].includes(data.type)) {
