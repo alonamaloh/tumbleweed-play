@@ -760,21 +760,14 @@ function drawBoard(force = false) {
   }
   const dx = radius * 1.78, dy = radius * 1.55, offset = .83;
   for (let r = 0; r < N; r++) {
-    const [x0, y0] = xy(r * N + Math.max(0, r - MID)), [x1, y1] = xy(r * N + Math.min(N - 1, r + MID));
-    if (r <= MID) svg += `<text class="coord" x="${x0 - offset * dx}" y="${y0}">${r + 1}</text>`;
-    if (r >= MID) svg += `<text class="coord" x="${x1 + offset * dx}" y="${y1}">${r + 1}</text>`;
+    const [x, y] = xy(r * N + Math.max(0, r - MID));
+    svg += `<text class="coord" x="${x - offset * dx}" y="${y}">${r + 1}</text>`;
   }
   for (let c = 0; c < N; c++) {
-    const [x0, y0] = xy(Math.max(0, c - MID) * N + c), [x1, y1] = xy(Math.min(N - 1, c + MID) * N + c);
+    const [x0, y0] = xy(Math.max(0, c - MID) * N + c);
     const letter = String.fromCharCode(65 + c);
-    if (c <= MID) {
-      const x = x0 + offset * dx / 2, y = y0 - offset * dy;
-      svg += `<text class="coord" x="${x}" y="${y}" transform="rotate(30 ${x} ${y})">${letter}</text>`;
-    }
-    if (c >= MID) {
-      const x = x1 - offset * dx / 2, y = y1 + offset * dy;
-      svg += `<text class="coord" x="${x}" y="${y}" transform="rotate(30 ${x} ${y})">${letter}</text>`;
-    }
+    const x = x0 + offset * dx / 2, y = y0 - offset * dy;
+    svg += `<text class="coord" x="${x}" y="${y}" transform="rotate(30 ${x} ${y})">${letter}</text>`;
   }
   board.innerHTML = svg;
   if (!analysis) { $("map-caption").textContent = ""; return; }
@@ -1981,7 +1974,7 @@ function searchFailed(message) {
 HN().then(module => {
   engine = module;
   for (const id of ["load", "newgame", "copy", "share"]) $(id).disabled = false;
-  worker = new Worker("search-worker.js?v=20261005-55");
+  worker = new Worker("search-worker.js?v=20261006-56");
   worker.onmessage = event => {
     let data = event.data;
     if (["preliminary", "preliminary-done", "preliminary-error"].includes(data.type)) {
