@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HighNoon</title>
+  <link rel="stylesheet" href="style.css?v=cnn-v11">
+</head>
+<body>
+  <main id="workspace" data-experience="setup">
+    <section class="board-panel" aria-label="Game board">
+      <div class="board-tools">
+        <div id="turn-indicator" class="turn-indicator" role="status" aria-live="polite"><span id="turn-stone" class="turn-stone red" aria-hidden="true" hidden></span><span id="turn-text">Loading…</span></div>
+        <div class="board-modes">
+          <div id="view-modes" class="view-modes" role="group" aria-label="Board display" hidden><button data-view="normal" aria-pressed="false">Normal</button><button data-view="ownership" class="selected" aria-pressed="true">Ownership</button><button data-view="visits" aria-pressed="false">Visits</button><button data-view="margin" aria-pressed="false">Margin</button></div>
+        </div>
+      </div>
+      <p id="cnn-startup-error" class="error" role="alert" hidden></p>
+      <div class="board-surface">
+        <header class="board-brand">
+          <h1 id="page-heading">HighNoon</h1><p id="board-subtitle">Size 8 · dcm01</p><p id="cnn-search-speed" aria-label="Search speed" title="Search speed will appear after new simulations complete.">— sims/s</p>
+        </header>
+        <div id="preview-context" class="preview-context" role="status" aria-live="polite" hidden></div>
+        <svg id="board" viewBox="0 0 600 560" aria-label="Tumbleweed board"></svg>
+      </div>
+      <div id="ownership-legend-row" class="legend" hidden><span class="white-swatch"></span> White <span id="ownership-legend" class="gradient" role="img" aria-label="Expected ownership balance"><span id="ownership-marker-value" aria-hidden="true"></span><span id="ownership-marker" aria-hidden="true"></span></span> Red <span class="red-swatch"></span></div>
+      <div id="margin-loss-legend" class="legend" hidden><span>Margin loss (cells)</span><span class="margin-loss-scale"><span class="margin-loss-gradient"></span><span class="margin-loss-ticks"><span>0</span><span>−5</span><span>≤−10</span></span></span></div>
+      <p id="map-caption" class="visually-hidden" aria-live="polite"></p>
+    </section>
+    <section id="setup-panel" class="card setup-panel" aria-labelledby="setup-heading">
+      <h2 id="setup-heading">Starting position</h2>
+      <div id="difficulty-modes" class="difficulty-modes" role="group" aria-label="Difficulty"><button data-difficulty="easy" aria-pressed="false" disabled>Easy</button><button data-difficulty="medium" class="selected" aria-pressed="true" disabled>Medium</button><button data-difficulty="hard" aria-pressed="false" disabled>Hard</button><button data-difficulty="expert" aria-pressed="false" disabled>Expert</button></div>
+      <p id="setup-instructions" aria-live="polite">Place the red starting stack, then the white one. HighNoon will choose which color to play.</p>
+      <div class="offering-controls">
+        <button id="highnoon-offer" class="primary-action" disabled>Let HighNoon place the starting stacks</button>
+        <button id="undo-offer" disabled hidden>Undo placement</button>
+        <button id="submit-offer" class="primary-action" disabled hidden>Offer this position</button>
+        <div id="color-choices" class="color-choices" role="group" aria-label="Choose your color" hidden><button id="pick-red" disabled>Pick Red</button><button id="pick-white" disabled>Pick White</button></div>
+      </div>
+    </section>
+    <aside>
+      <section id="position-panel" class="card position" aria-label="Game controls and move history">
+        <div class="game-controls">
+          <button id="newgame" disabled>New game</button>
+          <button id="enter-analysis" disabled>Enter analysis mode</button>
+        </div>
+        <textarea id="moves" rows="3" spellcheck="false" readonly aria-label="Move list" placeholder="Game moves will appear here."></textarea>
+        <div class="controls"><button id="copy" disabled>Copy</button><button id="share" disabled>Share link</button><div id="analysis-controls" class="analysis-controls" hidden><button id="load" disabled>Load</button><button id="analyze-game" disabled aria-pressed="false">Analyze game</button></div></div>
+        <input id="share-link" type="text" readonly hidden aria-label="Game sharing link">
+        <p id="position-error" class="error" role="alert"></p>
+      </section>
+      <p id="analysis-error" class="small error" role="alert"></p>
+      <section id="candidates-panel" class="card candidates" hidden>
+        <div id="candidate-scroll" class="table-wrap">
+          <table aria-label="Candidate moves">
+            <colgroup>
+              <col class="candidate-move-column">
+            </colgroup>
+            <colgroup>
+              <col class="candidate-visits-column">
+              <col class="candidate-share-column">
+            </colgroup>
+            <colgroup>
+              <col class="candidate-margin-column">
+            </colgroup>
+            <thead><tr>
+              <th scope="col">Move</th>
+              <th id="visits-heading" scope="colgroup" colspan="2" aria-sort="descending">
+                Visits<span class="sort-indicator" aria-hidden="true"></span>
+              </th>
+              <th id="margin-heading" scope="col" aria-sort="none">
+                Margin
+              </th>
+            </tr></thead>
+            <tbody id="candidates"></tbody>
+          </table>
+        </div>
+      </section>
+      <section id="history-panel" class="card history-panel" aria-label="Game history" hidden>
+        <div class="review">
+          <button id="back" aria-label="Previous move" aria-keyshortcuts="ArrowLeft">←</button>
+          <svg id="review" viewBox="0 0 600 180" role="slider" aria-label="Game position and expected margin" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="Empty board" aria-disabled="true" tabindex="-1" preserveAspectRatio="none"></svg>
+          <button id="forward" aria-label="Next move" aria-keyshortcuts="ArrowRight">→</button>
+          <span id="move-number">Empty board</span>
+        </div>
+      </section>
+    </aside>
+  </main>
+  <script src="config.js?v=cnn-v11"></script>
+  <script src="hn.js?v=cnn-v11"></script>
+  <script src="app.js?v=cnn-v11"></script>
+</body>
+</html>
