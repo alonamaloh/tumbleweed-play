@@ -1,0 +1,46 @@
+{
+  "version": "0.1.0-alpha.1",
+  "tag": "tumbstone-v0.1.0-alpha.1",
+  "assets": [
+    {
+      "file": "TumbStone-Alpha-0.1.0-alpha.1-standard-linux-x86_64.AppImage",
+      "platform": "Linux",
+      "edition": "standard",
+      "bytes": 204163576,
+      "sha256": "2cecd14b89655585bebbea948e585a0385cb33ff3308545d886608e9c957c1a0",
+      "url": "https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.1/TumbStone-Alpha-0.1.0-alpha.1-standard-linux-x86_64.AppImage"
+    },
+    {
+      "file": "TumbStone-Alpha-0.1.0-alpha.1-nvidia-linux-x86_64.AppImage",
+      "platform": "Linux",
+      "edition": "nvidia",
+      "bytes": 169957880,
+      "sha256": "8808b3f62fb8ea16af8e2fac53d94ef58ad31cc00cc4d276e52f15dc96af97cb",
+      "url": "https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.1/TumbStone-Alpha-0.1.0-alpha.1-nvidia-linux-x86_64.AppImage"
+    },
+    {
+      "file": "TumbStone-Alpha-0.1.0-alpha.1-macos-arm64.dmg",
+      "platform": "macOS",
+      "edition": "Core ML",
+      "bytes": 81616748,
+      "sha256": "803dc07ded8453416a891006209211577ce017bce9178e23e816f1bdf30ad0fe",
+      "url": "https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.1/TumbStone-Alpha-0.1.0-alpha.1-macos-arm64.dmg"
+    },
+    {
+      "file": "TumbStone-Alpha-0.1.0-alpha.1-standard-windows-x64-setup.exe",
+      "platform": "Windows",
+      "edition": "standard",
+      "bytes": 291529891,
+      "sha256": "9c5478f4d05d6d956579aaa98d81dc96f115c13481b369e21ee8b1936c937fb9",
+      "url": "https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.1/TumbStone-Alpha-0.1.0-alpha.1-standard-windows-x64-setup.exe"
+    },
+    {
+      "file": "TumbStone-Alpha-0.1.0-alpha.1-nvidia-windows-x64-setup.exe",
+      "platform": "Windows",
+      "edition": "nvidia",
+      "bytes": 249755721,
+      "sha256": "33c4af3f080e57aadb85d1502fa77fe8f128fcfef3a6dcf4116c93c0eb7626cc",
+      "url": "https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.1/TumbStone-Alpha-0.1.0-alpha.1-nvidia-windows-x64-setup.exe"
+    }
+  ]
+}

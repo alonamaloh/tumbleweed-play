@@ -3,43 +3,172 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HighNoon — Tumbleweed</title>
+<meta name="description" content="Play and analyze Tumbleweed with HighNoon in your browser, or download TumbStone Alpha for Linux, macOS, and Windows.">
+<meta name="theme-color" content="#f4efe6">
+<title>HighNoon &amp; TumbStone — Tumbleweed</title>
 <style>
-  :root { --bg:#f4efe6; --ink:#2b2620; --red:#c0392b; --neutral:#8a7f6d; --hex:#e2d8c3; --hexline:#b9ad94; }
-  body { margin:0; min-height:100vh; font:16px/1.4 system-ui, sans-serif; background:var(--bg); color:var(--ink);
-         display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px 16px; box-sizing:border-box; }
-  h1 { font-size:26px; margin:0 0 4px; }
-  .sub { color:#7a7161; margin-bottom:28px; text-align:center; }
-  .choices { display:flex; gap:24px; flex-wrap:wrap; justify-content:center; }
-  a.choice { display:flex; flex-direction:column; align-items:center; width:250px; padding:20px 18px 18px; border-radius:14px;
-             background:#fbf8f1; border:1px solid #d8cfba; color:inherit; text-decoration:none; }
-  a.choice:hover, a.choice:focus { border-color:#3a7d3a; box-shadow:0 2px 10px rgba(0,0,0,.08); outline:none; }
-  a.choice svg { width:190px; height:176px; }
-  .name { font-size:20px; font-weight:600; margin-top:10px; }
-  .what { color:#7a7161; font-size:14px; }
+  :root { color-scheme:light; --bg:#f4efe6; --paper:#fbf8f1; --ink:#2b2620; --muted:#686052; --line:#d8cfba; --green:#315d40; --neutral:#8a7f6d; --hex:#e2d8c3; --hexline:#b9ad94; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 system-ui,sans-serif; }
+  a { color:var(--green); text-underline-offset:3px; }
+  a:hover { text-decoration-thickness:2px; }
+  :focus-visible { outline:3px solid var(--green); outline-offset:4px; }
+  .wrap { max-width:1120px; margin:auto; padding:0 28px; }
+  header { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:24px 0; border-bottom:1px solid var(--line); }
+  .brand { font-weight:700; letter-spacing:.01em; }
+  nav { display:flex; gap:24px; font-size:14px; }
+  nav a { color:var(--ink); }
+  .intro { padding:50px 0 34px; }
+  h1 { font-size:clamp(30px,5vw,46px); letter-spacing:-.035em; line-height:1.15; margin:0 0 15px; }
+  .intro p { max-width:650px; margin:0; font-size:18px; color:var(--muted); }
+  section { padding:28px 0 38px; scroll-margin-top:20px; }
+  .section-heading { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:10px; }
+  h2 { font-size:26px; letter-spacing:-.02em; line-height:1.25; margin:0; }
+  .tag { border:1px solid var(--line); border-radius:30px; padding:3px 11px; font-size:12px; font-weight:650; color:var(--muted); }
+  .alpha { border-color:#d9b584; background:#f4e5cb; color:#714715; }
+  .section-copy { color:var(--muted); margin:0 0 22px; max-width:770px; }
+  .web-choices { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; max-width:690px; }
+  .web-choice { display:flex; align-items:center; gap:18px; padding:12px 22px; background:var(--paper); border:1px solid var(--line); border-radius:12px; text-decoration:none; color:var(--ink); }
+  .web-choice:hover { border-color:var(--green); }
+  .web-choice svg { width:94px; height:98px; flex:none; }
+  .web-choice strong { display:block; font-size:20px; }
+  .web-choice span { display:block; color:var(--muted); font-size:14px; }
+  #tumbstone { border-top:1px solid var(--line); padding-top:34px; }
+  .platforms { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; align-items:start; }
+  .platform { padding:23px; border:1px solid var(--line); border-radius:12px; background:var(--paper); min-width:0; }
+  h3 { font-size:23px; margin:0 0 2px; letter-spacing:-.02em; }
+  .requirements { margin:0 0 18px; color:var(--muted); font-size:13px; }
+  .download { display:flex; align-items:center; justify-content:space-between; gap:8px; background:var(--green); border:1px solid var(--green); border-radius:7px; padding:11px 13px; color:white; text-decoration:none; font-size:14px; font-weight:650; }
+  .download:hover { background:#244c32; text-decoration:none; }
+  .download span { font-size:12px; font-weight:400; white-space:nowrap; }
+  .download.secondary { background:transparent; color:var(--green); }
+  .download.secondary:hover { background:#e9eddf; }
+  .edition-note { font-size:13px; line-height:1.5; margin:7px 0 17px; color:var(--muted); }
+  .edition-note a { font-size:12px; }
+  details { border-top:1px solid var(--line); padding-top:13px; margin-top:17px; font-size:14px; }
+  summary { cursor:pointer; font-weight:650; color:var(--green); }
+  details p { margin:12px 0 0; }
+  details ol { padding-left:20px; }
+  details li { margin:8px 0; }
+  code { font-size:.86em; overflow-wrap:anywhere; }
+  pre { background:#eee8db; border-radius:6px; padding:12px; overflow-x:auto; font-size:13px; line-height:1.5; }
+  .release-links { display:flex; flex-wrap:wrap; gap:10px 24px; margin:20px 0 0; font-size:14px; }
+  .notes { display:grid; grid-template-columns:1fr 1fr; gap:32px; border-top:1px solid var(--line); padding-top:27px; }
+  .notes h2 { font-size:19px; margin-bottom:10px; }
+  .notes p { color:var(--muted); margin:0 0 12px; font-size:14px; }
+  .notes ul { padding-left:20px; color:var(--muted); font-size:14px; }
+  .notes li { margin-bottom:7px; }
+  footer { border-top:1px solid var(--line); padding:22px 0 30px; color:var(--muted); font-size:13px; }
+  .skip { position:absolute; left:12px; top:-60px; padding:8px 14px; background:var(--paper); }
+  .skip:focus { top:12px; }
+  @media(max-width:900px) { .platforms { grid-template-columns:1fr; } .platform { padding:22px; } .web-choices { max-width:none; } }
+  @media(max-width:540px) { .wrap { padding:0 18px; } header { flex-wrap:wrap; gap:12px; } nav { gap:20px; } .intro { padding:34px 0 20px; } .web-choices,.notes { grid-template-columns:1fr; } .web-choice svg { width:78px; height:80px; } .web-choice { padding:10px 18px; } }
 </style>
 </head>
 <body>
-<h1>HighNoon</h1>
-<div class="sub">Play and analyze Tumbleweed. Choose a board.</div>
-<div class="choices">
-  <a class="choice" href="lab6/"><svg id="b6" viewBox="0 0 190 176"></svg><div class="name">Size 6</div><div class="what">91 cells</div></a>
-  <a class="choice" href="lab8/"><svg id="b8" viewBox="0 0 190 176"></svg><div class="name">Size 8</div><div class="what">169 cells</div></a>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+  <header>
+    <div class="brand">HighNoon &amp; TumbStone</div>
+    <nav aria-label="Main navigation"><a href="#highnoon">Play online</a><a href="#tumbstone">Downloads</a><a href="#feedback">Feedback</a></nav>
+  </header>
+  <main id="main">
+    <div class="intro">
+      <h1>Play and analyze Tumbleweed.</h1>
+      <p>Choose HighNoon in your browser, or TumbStone on your computer for offline play and analysis.</p>
+    </div>
+    <section id="highnoon" aria-labelledby="highnoon-title">
+      <div class="section-heading"><h2 id="highnoon-title">HighNoon</h2><span class="tag">Web</span></div>
+      <p class="section-copy">Open a board and start playing. No installation needed.</p>
+      <div class="web-choices">
+        <a class="web-choice" href="lab6/"><svg id="b6" viewBox="0 0 190 176" aria-hidden="true"></svg><div><strong>Size 6 →</strong><span>91 cells · CodeCup size</span></div></a>
+        <a class="web-choice" href="lab8/"><svg id="b8" viewBox="0 0 190 176" aria-hidden="true"></svg><div><strong>Size 8 →</strong><span>169 cells</span></div></a>
+      </div>
+    </section>
+    <section id="tumbstone" aria-labelledby="tumbstone-title">
+      <div class="section-heading"><h2 id="tumbstone-title">TumbStone</h2><span class="tag alpha">Alpha · 0.1.0-alpha.1</span></div>
+      <p class="section-copy">A desktop app for play and analysis, with its engine and network included. This first public alpha is for testing. Choose your system and edition below.</p>
+      <div class="platforms">
+        <article class="platform">
+          <h3>Linux</h3>
+          <p class="requirements">x86_64 · Ubuntu 22.04+ initial target</p>
+          <a class="download" data-download href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.1/TumbStone-Alpha-0.1.0-alpha.1-standard-linux-x86_64.AppImage" aria-label="Download TumbStone for Linux, ONNX CPU AppImage">ONNX CPU <span>194.71 MiB ↓</span></a>
+          <p class="edition-note">Works without an NVIDIA GPU. <a href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.1/TumbStone-Alpha-0.1.0-alpha.1-standard-linux-x86_64.AppImage.sha256" aria-label="SHA256 checksum for Linux ONNX CPU">SHA256</a></p>
+          <a class="download secondary" data-download href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.1/TumbStone-Alpha-0.1.0-alpha.1-nvidia-linux-x86_64.AppImage" aria-label="Download TumbStone for Linux, NVIDIA AppImage">NVIDIA <span>162.08 MiB ↓</span></a>
+          <p class="edition-note">Requires a supported NVIDIA GPU and compatible graphics driver. <a href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.1/TumbStone-Alpha-0.1.0-alpha.1-nvidia-linux-x86_64.AppImage.sha256" aria-label="SHA256 checksum for Linux NVIDIA">SHA256</a></p>
+          <details>
+            <summary>Install on Linux</summary>
+            <p>Make the AppImage executable in your file manager, then open it. Or run:</p>
+            <pre><code>chmod +x FILENAME.AppImage
+./FILENAME.AppImage</code></pre>
+            <p>Replace <code>FILENAME.AppImage</code> with the downloaded filename. If mounting is unavailable, run it with <code>--appimage-extract</code>, then open <code>squashfs-root/AppRun</code>.</p>
+            <p>Other distributions and Wayland need tester confirmation. The standard edition is CPU-only; AMD/Intel GPU acceleration is not included.</p>
+          </details>
+        </article>
+        <article class="platform">
+          <h3>macOS</h3>
+          <p class="requirements">Apple Silicon (M1+) · macOS 14+</p>
+          <a class="download" data-download href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.1/TumbStone-Alpha-0.1.0-alpha.1-macos-arm64.dmg" aria-label="Download TumbStone for macOS, Apple Silicon DMG">Apple Silicon <span>77.84 MiB ↓</span></a>
+          <p class="edition-note">Uses Core ML for CPU/GPU inference. Intel Macs are not supported. <a href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.1/TumbStone-Alpha-0.1.0-alpha.1-macos-arm64.dmg.sha256" aria-label="SHA256 checksum for macOS">SHA256</a></p>
+          <details>
+            <summary>Install on macOS</summary>
+            <ol><li>Open the DMG and drag TumbStone Alpha to Applications.</li><li>Eject the disk image, then open the app from Applications.</li></ol>
+            <p>This alpha is ad hoc signed and is not notarized. If macOS blocks it, check the download source, attempt opening it, then use <strong>System Settings → Privacy &amp; Security → Open Anyway</strong> if offered.</p>
+            <p>Do not disable Gatekeeper globally. The first use of each board size takes longer while Core ML compiles its model.</p>
+          </details>
+        </article>
+        <article class="platform">
+          <h3>Windows</h3>
+          <p class="requirements">Windows 10/11 · x64</p>
+          <a class="download" data-download href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.1/TumbStone-Alpha-0.1.0-alpha.1-standard-windows-x64-setup.exe" aria-label="Download TumbStone for Windows, standard DirectML and CPU installer">DirectML / CPU <span>278.02 MiB ↓</span></a>
+          <p class="edition-note">DirectX 12 GPU acceleration, with CPU fallback. <a href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.1/TumbStone-Alpha-0.1.0-alpha.1-standard-windows-x64-setup.exe.sha256" aria-label="SHA256 checksum for Windows standard">SHA256</a></p>
+          <a class="download secondary" data-download href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.1/TumbStone-Alpha-0.1.0-alpha.1-nvidia-windows-x64-setup.exe" aria-label="Download TumbStone for Windows, NVIDIA installer">NVIDIA <span>238.19 MiB ↓</span></a>
+          <p class="edition-note">Requires a supported NVIDIA GPU and compatible graphics driver. <a href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.1/TumbStone-Alpha-0.1.0-alpha.1-nvidia-windows-x64-setup.exe.sha256" aria-label="SHA256 checksum for Windows NVIDIA">SHA256</a></p>
+          <details>
+            <summary>Install on Windows</summary>
+            <p>Run the setup EXE, then open TumbStone Alpha from the Start menu. The installers include WebView2. Both editions can coexist.</p>
+            <p>These installers are unsigned. SmartScreen may show a warning; after checking the source, <strong>More info → Run anyway</strong> may be available.</p>
+            <p>Smart App Control or organization policy can block installation entirely.</p>
+          </details>
+        </article>
+      </div>
+      <p class="release-links"><a href="https://github.com/alonamaloh/tumbleweed-play/releases/tag/tumbstone-v0.1.0-alpha.1">Release notes &amp; all files</a><a href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.1/SHA256SUMS.txt">All SHA256 checksums</a></p>
+    </section>
+    <section class="notes" aria-label="Alpha information">
+      <div>
+        <h2>Before you play</h2>
+        <ul><li>All editions include the same network and support sizes 6 and 8. Sizes 10 and 11 are experimental.</li><li>No Python or development tools are needed. NVIDIA editions need the graphics driver, with no CUDA Toolkit or cuDNN installation.</li><li>Copy your game text or share URL before closing. Automatic game restoration is not included in this alpha.</li><li>Tested on an M2 MacBook Air, an RTX 3080 Ti on Linux, and an RTX 5070 on Windows. Other systems need tester feedback.</li></ul>
+      </div>
+      <div id="feedback">
+        <h2>Help test TumbStone</h2>
+        <p>Found a problem? Include your app version and edition, operating system, GPU and driver or Mac model, board size, game text, and the steps to reproduce it.</p>
+        <p><a href="https://github.com/alonamaloh/tumbleweed-play/issues/new/choose">Report a problem on GitHub →</a></p>
+        <p><a href="https://github.com/alonamaloh/tumbleweed-play/issues">Browse existing reports</a></p>
+        <details><summary>Verify a download</summary><p>Download its SHA256 file into the same folder. On Linux run <code>sha256sum -c FILENAME.sha256</code>; on macOS run <code>shasum -a 256 -c FILENAME.sha256</code>. On Windows compare <code>Get-FileHash .\FILENAME.exe -Algorithm SHA256</code> with the checksum file.</p></details>
+      </div>
+    </section>
+  </main>
+  <footer>TumbStone Alpha 0.1.0-alpha.1 · <a href="https://github.com/alonamaloh/tumbleweed-play/releases">Releases</a> · <a href="https://github.com/alonamaloh/tumbleweed-play/issues">Feedback</a></footer>
 </div>
 <script>
-"use strict";
-// a small picture of each board: every cell, with the neutral stack in the centre
-function board(id, side){
-  const n=2*side-1, m=side-1, size=88/(1.78*(side-0.4)), cx=95, cy=88; let s="";
-  for(let r=0;r<n;r++) for(let c=0;c<n;c++){
-    if(Math.abs(c-r)>m) continue;
-    const x=cx+(c-m-(r-m)/2)*size*1.78, y=cy+(r-m)*size*1.55; let p="";
-    for(let k=0;k<6;k++){ const a=Math.PI/180*(60*k+30); p+=(k?"L":"M")+(x+size*Math.cos(a)).toFixed(1)+","+(y+size*Math.sin(a)).toFixed(1); }
-    s+=`<path d="${p}Z" fill="${c===m&&r===m?'var(--neutral)':'var(--hex)'}" stroke="var(--hexline)" stroke-width="0.7"></path>`;
+  "use strict";
+  function board(id, side) {
+    const n=2*side-1, m=side-1, size=88/(1.78*(side-0.4)), cx=95, cy=88;
+    let paths="";
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++) {
+      if(Math.abs(c-r)>m) continue;
+      const x=cx+(c-m-(r-m)/2)*size*1.78, y=cy+(r-m)*size*1.55;
+      let path="";
+      for(let k=0;k<6;k++) {
+        const angle=Math.PI/180*(60*k+30);
+        path+=(k?"L":"M")+(x+size*Math.cos(angle)).toFixed(1)+","+(y+size*Math.sin(angle)).toFixed(1);
+      }
+      paths+=`<path d="${path}Z" fill="${c===m&&r===m?'var(--neutral)':'var(--hex)'}" stroke="var(--hexline)" stroke-width="0.7"></path>`;
+    }
+    document.getElementById(id).innerHTML=paths;
   }
-  document.getElementById(id).innerHTML=s;
-}
-board('b6',6); board('b8',8);
+  board('b6',6);
+  board('b8',8);
 </script>
 </body>
 </html>
