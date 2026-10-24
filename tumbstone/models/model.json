@@ -1,0 +1,24 @@
+{
+  "checkpoint_sha256": "b287a313185bf77306e7b76db8e77fbd06acd7b11902dd3d2367e57a6a9ca2f0",
+  "parameters": 5323010,
+  "precision": "fp32",
+  "complete": true,
+  "model_name": "Gated C192 \u00b7 8 blocks \u00b7 RL rung 5",
+  "input_format": "cells-stm",
+  "sides": {
+    "6": {
+      "file": "side6.onnx",
+      "sha256": "926500554a17d22fbdade3527e0f24b32ca3a6156e1c440e0ea380fde7bda11e",
+      "bytes": 21658092,
+      "cells": 91,
+      "reference": "reference6.json"
+    },
+    "8": {
+      "file": "side8.onnx",
+      "sha256": "772a76c75ba2416b9cde8e5c9df607676b62e6846ccfb97b2a5e7ba014a29afe",
+      "bytes": 21708760,
+      "cells": 169,
+      "reference": "reference8.json"
+    }
+  }
+}

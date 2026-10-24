@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Play and analyze Tumbleweed with HighNoon in your browser, or download TumbStone Alpha for Linux, macOS, and Windows.">
+<meta name="description" content="Play and analyze Tumbleweed with TumbStone or HighNoon in your browser, or download TumbStone for Linux, macOS, and Windows.">
 <meta name="theme-color" content="#f4efe6">
 <title>HighNoon &amp; TumbStone — Tumbleweed</title>
 <style>
@@ -70,13 +70,21 @@
 <div class="wrap">
   <header>
     <div class="brand">HighNoon &amp; TumbStone</div>
-    <nav aria-label="Main navigation"><a href="#highnoon">Play online</a><a href="#tumbstone">Downloads</a><a href="#feedback">Feedback</a></nav>
+    <nav aria-label="Main navigation"><a href="#tumbstone-web">Play online</a><a href="#tumbstone">Downloads</a><a href="#feedback">Feedback</a></nav>
   </header>
   <main id="main">
     <div class="intro">
       <h1>Play and analyze Tumbleweed.</h1>
-      <p>Choose HighNoon in your browser, or TumbStone on your computer for offline play and analysis.</p>
+      <p>Play in your browser with TumbStone or HighNoon, or download TumbStone for offline play and analysis.</p>
     </div>
+    <section id="tumbstone-web" aria-labelledby="tumbstone-web-title">
+      <div class="section-heading"><h2 id="tumbstone-web-title">TumbStone</h2><span class="tag">Web · Gated RL rung 5</span></div>
+      <p class="section-copy">Play and analyze with our large gated-propagation network. Runs on your own device, using your browser's GPU when supported or CPU otherwise. The first visit downloads about 45 MB. Choose one simulation per move in Settings to try policy-only play.</p>
+      <div class="web-choices">
+        <a class="web-choice" href="tumbstone/lab6/"><svg id="ts6" viewBox="0 0 190 176" aria-hidden="true"></svg><div><strong>Size 6 →</strong><span>91 cells · Play or analyze</span></div></a>
+        <a class="web-choice" href="tumbstone/lab8/"><svg id="ts8" viewBox="0 0 190 176" aria-hidden="true"></svg><div><strong>Size 8 →</strong><span>169 cells · Play or analyze</span></div></a>
+      </div>
+    </section>
     <section id="highnoon" aria-labelledby="highnoon-title">
       <div class="section-heading"><h2 id="highnoon-title">HighNoon</h2><span class="tag">Web</span></div>
       <p class="section-copy">Open a board and start playing. No installation needed.</p>
@@ -87,7 +95,7 @@
     </section>
     <section id="tumbstone" aria-labelledby="tumbstone-title">
       <div class="section-heading"><h2 id="tumbstone-title">TumbStone</h2><span class="tag alpha">Alpha · 0.1.0-alpha.1</span></div>
-      <p class="section-copy">A desktop app for play and analysis, with its engine and network included. This first public alpha is for testing. Choose your system and edition below.</p>
+      <p class="section-copy">A desktop app for play and analysis, with its engine and network included. These alpha downloads use the earlier directional network; the new gated rung-5 network is available in the browser above. Choose your system and edition below.</p>
       <div class="platforms">
         <article class="platform">
           <h3>Linux</h3>
@@ -169,6 +177,8 @@
   }
   board('b6',6);
   board('b8',8);
+  board('ts6',6);
+  board('ts8',8);
 </script>
 </body>
 </html>
