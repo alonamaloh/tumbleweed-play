@@ -1961,7 +1961,7 @@ HN().then(module => {
   if (module._hn_side() !== SIDE) throw new Error('Board geometry does not match the selected size.');
   engine = module;
   for (const id of ["load", "newgame", "copy"]) $(id).disabled = false;
-  worker = new Worker("search-worker.js?v=fc9026c37d405786" + (location.search ? "&" + location.search.slice(1) : ""));
+  worker = new Worker("search-worker.js?v=a252fe4256f04627" + (location.search ? "&" + location.search.slice(1) : ""));
   worker.onmessage = event => {
     let data = event.data;
     if (data.type === "loading") { $("engine-connection").textContent = data.message; return; }

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TumbStone</title>
+  <link rel="stylesheet" href="style.css?v=remote01">
+</head>
+<body>
+  <main id="workspace" data-experience="setup">
+    <section class="board-panel" aria-label="Game board">
+      <header class="board-brand">
+        <h1 id="page-heading">TumbStone</h1><p id="board-subtitle">Size 8 · Loading network…</p>
+      </header>
+      <div class="board-tools">
+        <div id="turn-indicator" class="turn-indicator" role="status" aria-live="polite"><span id="turn-stone" class="turn-stone red" aria-hidden="true" hidden></span><span id="turn-text">Loading…</span></div>
+        <div class="board-modes">
+          <div id="view-modes" class="view-modes" role="group" aria-label="Board display" hidden><button data-view="normal" aria-pressed="false">Normal</button><button data-view="ownership" class="selected" aria-pressed="true">Ownership</button><button data-view="visits" aria-pressed="false">Visits</button><button data-view="margin" aria-pressed="false">Margin</button></div>
+        </div>
+      </div>
+      <div class="board-surface">
+        <div id="preview-context" class="preview-context" role="status" aria-live="polite" hidden></div>
+        <svg id="board" viewBox="0 0 600 560" aria-label="Tumbleweed board"></svg>
+      </div>
+      <div id="ownership-legend-row" class="legend" hidden><span class="white-swatch"></span> White <span id="ownership-legend" class="gradient" role="img" aria-label="Expected ownership balance"><span id="ownership-marker-value" aria-hidden="true"></span><span id="ownership-marker" aria-hidden="true"></span></span> Red <span class="red-swatch"></span></div>
+      <div id="margin-loss-legend" class="legend" hidden><span>Margin loss (cells)</span><span class="margin-loss-scale"><span class="margin-loss-gradient"></span><span class="margin-loss-ticks"><span>0</span><span>−5</span><span>≤−10</span></span></span></div>
+      <p id="played-move-note" class="played-move-note" aria-live="polite"></p>
+      <p id="map-caption" class="visually-hidden" aria-live="polite"></p>
+    </section>
+    <section id="setup-panel" class="card setup-panel" aria-labelledby="setup-heading">
+      <h2 id="setup-heading">Starting position</h2>
+      <div id="difficulty-modes" class="difficulty-modes" role="group" aria-label="Difficulty"><button data-difficulty="easy" aria-pressed="false" disabled>Easy</button><button data-difficulty="medium" class="selected" aria-pressed="true" disabled>Medium</button><button data-difficulty="hard" aria-pressed="false" disabled>Hard</button><button data-difficulty="expert" aria-pressed="false" disabled>Expert</button></div>
+      <p id="setup-instructions" aria-live="polite">Place the red starting stack, then the white one. TumbStone will choose which color to play.</p>
+      <div class="offering-controls">
+        <button id="highnoon-offer" class="primary-action" disabled>Let TumbStone place the starting stacks</button>
+        <button id="undo-offer" disabled hidden>Undo placement</button>
+        <button id="submit-offer" class="primary-action" disabled hidden>Offer this position</button>
+        <div id="color-choices" class="color-choices" role="group" aria-label="Choose your color" hidden><button id="pick-red" disabled>Pick Red</button><button id="pick-white" disabled>Pick White</button></div>
+      </div>
+    </section>
+    <aside>
+      <section class="card engine-settings" aria-label="Engine settings">
+        <p id="engine-connection" role="status">Connecting to engine…</p>
+        <button id="settings" type="button">Settings</button>
+        <div class="controls"><button id="search-now" disabled>Search</button><button id="stop-search" disabled>Stop</button></div>
+        <p id="engine-search-stats" class="small" role="status"></p>
+      </section>
+      <section id="position-panel" class="card position" aria-label="Game controls and move history">
+        <div class="game-controls">
+          <button id="newgame" disabled>New game</button>
+          <button id="enter-analysis" disabled>Enter analysis mode</button>
+        </div>
+        <textarea id="moves" rows="3" spellcheck="false" readonly aria-label="Move list" placeholder="Game moves will appear here."></textarea>
+        <div class="controls"><button id="copy" disabled>Copy</button><div id="analysis-controls" class="analysis-controls" hidden><button id="load" disabled>Load</button><button id="analyze-game" disabled aria-pressed="false">Analyze game</button></div></div>
+        <p id="position-error" class="error" role="alert"></p>
+      </section>
+      <p id="analysis-error" class="small error" role="alert"></p>
+      <section id="candidates-panel" class="card candidates" hidden>
+        <div id="candidate-scroll" class="table-wrap">
+          <table aria-label="Candidate moves">
+            <colgroup>
+              <col class="candidate-move-column">
+            </colgroup>
+            <colgroup>
+              <col class="candidate-visits-column">
+              <col class="candidate-share-column">
+            </colgroup>
+            <colgroup>
+              <col class="candidate-margin-column">
+            </colgroup>
+            <thead><tr>
+              <th scope="col">Move</th>
+              <th id="visits-heading" scope="colgroup" colspan="2" aria-sort="descending">
+                Visits<span class="sort-indicator" aria-hidden="true"></span>
+              </th>
+              <th id="margin-heading" scope="col" aria-sort="none">
+                Margin
+              </th>
+            </tr></thead>
+            <tbody id="candidates"></tbody>
+          </table>
+        </div>
+      </section>
+      <section id="history-panel" class="card history-panel" aria-label="Game history" hidden>
+        <div class="review">
+          <button id="back" aria-label="Previous move" aria-keyshortcuts="ArrowLeft">←</button>
+          <svg id="review" viewBox="0 0 600 180" role="slider" aria-label="Game position and expected margin" aria-orientation="horizontal" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="Empty board" aria-disabled="true" tabindex="-1" preserveAspectRatio="none"></svg>
+          <button id="forward" aria-label="Next move" aria-keyshortcuts="ArrowRight">→</button>
+          <span id="move-number">Empty board</span>
+        </div>
+      </section>
+    </aside>
+  </main>
+  <dialog id="newgame-dialog" aria-labelledby="newgame-title">
+    <div class="dialog-heading"><h2 id="newgame-title">New game</h2><button type="button" data-close-dialog="newgame-dialog" aria-label="Cancel new game">×</button></div>
+    <p>Choose a board size</p>
+    <div class="size-choices">
+      <button type="button" data-new-size="6">6</button><button type="button" data-new-size="8">8</button><button type="button" data-new-size="10">10</button><button type="button" data-new-size="11">11</button>
+    </div>
+  </dialog>
+  <dialog id="settings-dialog" aria-labelledby="settings-title">
+    <div class="dialog-heading"><h2 id="settings-title">Settings</h2><button type="button" data-close-dialog="settings-dialog" aria-label="Close settings">×</button></div>
+    <form id="budget-form">
+      <label>Budget for <select id="budget-purpose"><option value="play">Playing</option><option value="analysis">Analysis</option></select></label>
+      <label>Limit <select id="budget-mode"><option value="simulations">Simulations per move</option><option value="seconds">Seconds per move</option><option value="game-simulations">Simulations per game</option><option value="game">Engine seconds per game</option></select></label>
+      <label><span id="budget-amount-label">Simulations</span> <input id="budget-amount" type="number" min="1" max="100000000" step="1" value="100000"></label>
+      <label>Opening effort <select id="opening-multiplier"><option value="1">Normal</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
+      <p class="small">Targets include reused simulations. Time is converted using measured search speed. Game budgets allocate 7 ÷ board cells of the remaining budget per move. Extra opening effort fades over the first 40 moves.</p>
+      <label class="sound-setting"><span>Sound</span><input id="sound-enabled" type="checkbox" checked></label>
+      <button type="submit" class="primary-action">Apply</button>
+    </form>
+  </dialog>
+  <script src="config.js?v=remote01"></script>
+  <script src="hn.js?v=remote01"></script>
+  <script src="app.js?v=a252fe4256f04627"></script>
+</body>
+</html>

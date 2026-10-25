@@ -395,6 +395,8 @@ async function initialize() {
   board = await HN();
   metadata = await (await fetch("../models/model.json", {cache: "no-cache"})).json();
   const entry = metadata.sides[String(side)];
+  if (!entry || entry.cells !== count || board._hn_side() !== side)
+    throw new Error("Board rules and network size do not match");
   modelBytes = await (await fetch(`../models/${entry.file}?sha=${entry.sha256}`)).arrayBuffer();
   const digest = [...new Uint8Array(await crypto.subtle.digest("SHA-256", modelBytes))]
     .map(v => v.toString(16).padStart(2, "0")).join("");
@@ -421,7 +423,8 @@ async function initialize() {
   if (!session) throw new Error(`Could not initialize browser inference: ${failure}`);
   initialized = true;
   postMessage({type: "ready", protocol: "highnoon-analysis", version: 1,
-    board_sizes: [6, 8], model_sha256: metadata.checkpoint_sha256,
+    board_sizes: Object.keys(metadata.sides).map(Number).sort((a, b) => a - b),
+    model_sha256: metadata.checkpoint_sha256,
     model_label: `${metadata.model_name} · ${backend === "webgpu" ? "WebGPU" : "browser CPU"}`,
     backend, verification, fallbackReason: backend === "wasm" ? failure : null});
   drain();

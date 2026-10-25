@@ -3,7 +3,7 @@
   "parameters": 5323010,
   "precision": "fp32",
   "complete": true,
-  "model_name": "Gated C192 \u00b7 8 blocks \u00b7 RL rung 5",
+  "model_name": "Gated C192/B8 RL rung 5",
   "input_format": "cells-stm",
   "sides": {
     "6": {
@@ -19,6 +19,20 @@
       "bytes": 21708760,
       "cells": 169,
       "reference": "reference8.json"
+    },
+    "10": {
+      "file": "side10.onnx",
+      "sha256": "7ab64f74abf36df3f8e03cd6c6a458132a32e05446da4955f53fe6860971065c",
+      "bytes": 21761570,
+      "cells": 271,
+      "reference": "reference10.json"
+    },
+    "11": {
+      "file": "side11.onnx",
+      "sha256": "8ef42f1386a7fb5ebfb2a56aaa5b3efaa72465db0868e90d6c6ecb97e9443c7e",
+      "bytes": 21788718,
+      "cells": 331,
+      "reference": "reference11.json"
     }
   }
 }

@@ -1,4 +1,4 @@
-const LAB_BOARD_SIZES = [6, 8];
+const LAB_BOARD_SIZES = [6, 8, 10, 11];
 "use strict";
 const ANALYSIS_CONFIG = {
   side: Number(location.pathname.match(/\/lab(6|8|10|11)\//)?.[1] || 8),
