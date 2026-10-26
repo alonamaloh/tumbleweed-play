@@ -43,8 +43,11 @@
   .download span { font-size:12px; font-weight:400; white-space:nowrap; }
   .download.secondary { background:transparent; color:var(--green); }
   .download.secondary:hover { background:#e9eddf; }
-  .edition-note { font-size:13px; line-height:1.5; margin:7px 0 17px; color:var(--muted); }
-  .edition-note a { font-size:12px; }
+  .edition { display:flex; flex-direction:column; gap:9px; }
+  .edition + .edition { margin-top:24px; padding-top:20px; border-top:1px solid var(--line); }
+  .edition h4 { font-size:16px; line-height:1.3; margin:0; }
+  .edition-note { font-size:13px; line-height:1.5; margin:0; color:var(--muted); }
+  .checksum { font-size:12px; margin:0; }
   details { border-top:1px solid var(--line); padding-top:13px; margin-top:17px; font-size:14px; }
   summary { cursor:pointer; font-weight:650; color:var(--green); }
   details p { margin:12px 0 0; }
@@ -102,11 +105,19 @@
       <div class="platforms">
         <article class="platform">
           <h3>Linux</h3>
-          <p class="requirements">x86_64 · Ubuntu 22.04+ initial target</p>
-          <a class="download" data-download href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone-gated-rung05-ONNX-linux-x86_64.AppImage" aria-label="Download TumbStone for Linux, ONNX CPU AppImage">ONNX CPU <span>262.55 MiB ↓</span></a>
-          <p class="edition-note">Works without an NVIDIA GPU. <a href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone-gated-rung05-ONNX-linux-x86_64.AppImage.sha256" aria-label="SHA256 checksum for Linux ONNX CPU">SHA256</a></p>
-          <a class="download secondary" data-download href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone-gated-rung05-NVIDIA-linux-x86_64.AppImage" aria-label="Download TumbStone for Linux, NVIDIA AppImage">NVIDIA <span>190.41 MiB ↓</span></a>
-          <p class="edition-note">Requires a supported NVIDIA GPU and compatible graphics driver. <a href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone-gated-rung05-NVIDIA-linux-x86_64.AppImage.sha256" aria-label="SHA256 checksum for Linux NVIDIA">SHA256</a></p>
+          <p class="requirements">x86_64 · Ubuntu 22.04+</p>
+          <div class="edition" role="group" aria-labelledby="linux-cpu-title">
+            <h4 id="linux-cpu-title">ONNX CPU</h4>
+            <p class="edition-note" id="linux-cpu-description">Works without an NVIDIA GPU.</p>
+            <a class="download" data-download href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone-gated-rung05-ONNX-linux-x86_64.AppImage" aria-label="Download TumbStone for Linux, ONNX CPU AppImage" aria-describedby="linux-cpu-description">Download AppImage <span>262.55 MiB ↓</span></a>
+            <p class="checksum"><a href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone-gated-rung05-ONNX-linux-x86_64.AppImage.sha256" aria-label="SHA256 checksum for Linux ONNX CPU">SHA256</a></p>
+          </div>
+          <div class="edition" role="group" aria-labelledby="linux-nvidia-title">
+            <h4 id="linux-nvidia-title">NVIDIA</h4>
+            <p class="edition-note" id="linux-nvidia-description">Requires a supported NVIDIA GPU and compatible graphics driver.</p>
+            <a class="download secondary" data-download href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone-gated-rung05-NVIDIA-linux-x86_64.AppImage" aria-label="Download TumbStone for Linux, NVIDIA AppImage" aria-describedby="linux-nvidia-description">Download AppImage <span>190.41 MiB ↓</span></a>
+            <p class="checksum"><a href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone-gated-rung05-NVIDIA-linux-x86_64.AppImage.sha256" aria-label="SHA256 checksum for Linux NVIDIA">SHA256</a></p>
+          </div>
           <details>
             <summary>Install on Linux</summary>
             <p>Make the AppImage executable in your file manager, then open it. Or run:</p>
@@ -119,8 +130,12 @@
         <article class="platform">
           <h3>macOS</h3>
           <p class="requirements">Apple Silicon (M1+) · macOS 14+</p>
-          <a class="download" data-download href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone_Alpha_0.1.0-alpha.3_aarch64.dmg" aria-label="Download TumbStone for macOS, Apple Silicon DMG">Apple Silicon <span>146.00 MiB ↓</span></a>
-          <p class="edition-note">Uses Core ML for CPU/GPU inference. Intel Macs are not supported. <a href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone_Alpha_0.1.0-alpha.3_aarch64.dmg.sha256" aria-label="SHA256 checksum for macOS">SHA256</a></p>
+          <div class="edition" role="group" aria-labelledby="macos-title">
+            <h4 id="macos-title">Apple Silicon</h4>
+            <p class="edition-note" id="macos-description">Uses Core ML for CPU/GPU inference. Intel Macs are not supported.</p>
+            <a class="download" data-download href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone_Alpha_0.1.0-alpha.3_aarch64.dmg" aria-label="Download TumbStone for macOS, Apple Silicon DMG" aria-describedby="macos-description">Download DMG <span>146.00 MiB ↓</span></a>
+            <p class="checksum"><a href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone_Alpha_0.1.0-alpha.3_aarch64.dmg.sha256" aria-label="SHA256 checksum for macOS">SHA256</a></p>
+          </div>
           <details>
             <summary>Install on macOS</summary>
             <ol><li>Open the DMG and drag TumbStone Alpha to Applications.</li><li>Eject the disk image, then open the app from Applications.</li></ol>
@@ -131,10 +146,18 @@
         <article class="platform">
           <h3>Windows</h3>
           <p class="requirements">Windows 10/11 · x64</p>
-          <a class="download" data-download href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone-Alpha-0.1.0-alpha.3-standard-windows-x64-setup.exe" aria-label="Download TumbStone for Windows, standard DirectML and CPU installer">DirectML / CPU <span>345.50 MiB ↓</span></a>
-          <p class="edition-note">DirectX 12 GPU acceleration, with CPU fallback. <a href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone-Alpha-0.1.0-alpha.3-standard-windows-x64-setup.exe.sha256" aria-label="SHA256 checksum for Windows standard">SHA256</a></p>
-          <a class="download secondary" data-download href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone-Alpha-0.1.0-alpha.3-nvidia-windows-x64-setup.exe" aria-label="Download TumbStone for Windows, NVIDIA installer">NVIDIA <span>267.36 MiB ↓</span></a>
-          <p class="edition-note">Requires a supported NVIDIA GPU and compatible graphics driver. <a href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone-Alpha-0.1.0-alpha.3-nvidia-windows-x64-setup.exe.sha256" aria-label="SHA256 checksum for Windows NVIDIA">SHA256</a></p>
+          <div class="edition" role="group" aria-labelledby="windows-standard-title">
+            <h4 id="windows-standard-title">DirectML / CPU</h4>
+            <p class="edition-note" id="windows-standard-description">DirectX 12 GPU acceleration, with CPU fallback.</p>
+            <a class="download" data-download href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone-Alpha-0.1.0-alpha.3-standard-windows-x64-setup.exe" aria-label="Download TumbStone for Windows, standard DirectML and CPU installer" aria-describedby="windows-standard-description">Download installer <span>345.50 MiB ↓</span></a>
+            <p class="checksum"><a href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone-Alpha-0.1.0-alpha.3-standard-windows-x64-setup.exe.sha256" aria-label="SHA256 checksum for Windows standard">SHA256</a></p>
+          </div>
+          <div class="edition" role="group" aria-labelledby="windows-nvidia-title">
+            <h4 id="windows-nvidia-title">NVIDIA</h4>
+            <p class="edition-note" id="windows-nvidia-description">Requires a supported NVIDIA GPU and compatible graphics driver.</p>
+            <a class="download secondary" data-download href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone-Alpha-0.1.0-alpha.3-nvidia-windows-x64-setup.exe" aria-label="Download TumbStone for Windows, NVIDIA installer" aria-describedby="windows-nvidia-description">Download installer <span>267.36 MiB ↓</span></a>
+            <p class="checksum"><a href="https://github.com/alonamaloh/tumbleweed-play/releases/download/tumbstone-v0.1.0-alpha.3/TumbStone-Alpha-0.1.0-alpha.3-nvidia-windows-x64-setup.exe.sha256" aria-label="SHA256 checksum for Windows NVIDIA">SHA256</a></p>
+          </div>
           <details>
             <summary>Install on Windows</summary>
             <p>Run the setup EXE, then open TumbStone Alpha from the Start menu. The installers include WebView2. Both editions can coexist.</p>
