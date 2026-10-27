@@ -890,7 +890,8 @@ function toggleGameAnalysis() {
 function sortedCandidates(data) {
   if (data.policyOnly) return data.candidates.slice().sort((a, b) => b.prior - a.prior || a.move - b.move);
   return data.candidates.filter(candidate => candidate.visits > 0).slice()
-    .sort((a, b) => b.visits - a.visits || a.move - b.move);
+    .sort((a, b) => b.visits - a.visits || b.margin - a.margin ||
+      b.prior - a.prior || a.move - b.move);
 }
 
 function renderCandidates(candidates, total, best, hasBaseline, policyOnly = false) {
@@ -1961,7 +1962,7 @@ HN().then(module => {
   if (module._hn_side() !== SIDE) throw new Error('Board geometry does not match the selected size.');
   engine = module;
   for (const id of ["load", "newgame", "copy"]) $(id).disabled = false;
-  worker = new Worker("search-worker.js?v=a252fe4256f04627" + (location.search ? "&" + location.search.slice(1) : ""));
+  worker = new Worker("search-worker.js?v=8c2c23b99b9b5987" + (location.search ? "&" + location.search.slice(1) : ""));
   worker.onmessage = event => {
     let data = event.data;
     if (data.type === "loading") { $("engine-connection").textContent = data.message; return; }

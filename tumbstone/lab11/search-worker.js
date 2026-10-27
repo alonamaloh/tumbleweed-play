@@ -100,11 +100,12 @@ function restore(request) {
 function node(move = -1, prior = 1) {
   created++;
   return {move, prior, visits: 0, sum: 0, moves: null, priors: null, children: null, own: null, square: null,
-    value: 0, terminal: false, leaf: null};
+    value: 0, stm: null, terminal: false, leaf: null};
 }
 
 async function expand(current) {
   const stm = board._hn_stm(), sign = stm === 1 ? 1 : -1;
+  current.stm = stm;
   const terminal = !!board._hn_score(2);
   const prediction = terminal ? null : await predict(codes(), stm);
   const ownership = new Float32Array(count);
@@ -179,9 +180,14 @@ async function simulate(request) {
 }
 
 function ranked(current) {
+  // Sums are always Red's margin. Rank each node's moves for its own player,
+  // including opponent replies and deeper PV nodes after root reuse.
+  const sign = current.stm === 1 ? 1 : -1;
+  const score = child => child.visits ? sign * child.sum / child.visits : 0;
   return Array.from(current.moves || [], (move, i) => current.children[i] ||
     {move, prior: current.priors[i], visits: 0, children: null})
-    .sort((a, b) => b.visits - a.visits || b.prior - a.prior);
+    .sort((a, b) => b.visits - a.visits || score(b) - score(a) ||
+      b.prior - a.prior || a.move - b.move);
 }
 
 function visitLeaderLocked(current, limit) {
@@ -195,7 +201,7 @@ function visitLeaderLocked(current, limit) {
   }
   // This worker has one leaf in flight, already backed up before this check.
   // Give every remaining visit to the runner-up. Equality is not decisive:
-  // tied visit counts can select a different move via the prior tie-break.
+  // Tied visits can select a different move via the score/prior tie-breaks.
   return first - second > remaining;
 }
 
