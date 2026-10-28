@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Play and analyze Tumbleweed with TumbStone or HighNoon in your browser, or download TumbStone for Linux, macOS, and Windows.">
+<meta name="description" content="Play Tumbleweed with Frontier, TumbStone or HighNoon in your browser, or download TumbStone for offline play and analysis.">
 <meta name="theme-color" content="#f4efe6">
-<title>HighNoon &amp; TumbStone — Tumbleweed</title>
+<title>HighNoon, TumbStone &amp; Frontier — Tumbleweed</title>
 <style>
   :root { color-scheme:light; --bg:#f4efe6; --paper:#fbf8f1; --ink:#2b2620; --muted:#686052; --line:#d8cfba; --green:#315d40; --neutral:#8a7f6d; --hex:#e2d8c3; --hexline:#b9ad94; }
   * { box-sizing:border-box; }
@@ -72,13 +72,13 @@
 <a class="skip" href="#main">Skip to content</a>
 <div class="wrap">
   <header>
-    <div class="brand">HighNoon &amp; TumbStone</div>
+    <div class="brand">HighNoon · TumbStone · Frontier</div>
     <nav aria-label="Main navigation"><a href="#tumbstone-web">Play online</a><a href="#tumbstone">Downloads</a><a href="#feedback">Feedback</a></nav>
   </header>
   <main id="main">
     <div class="intro">
       <h1>Play and analyze Tumbleweed.</h1>
-      <p>Play in your browser with TumbStone or HighNoon, or download TumbStone for offline play and analysis.</p>
+      <p>Play in your browser with TumbStone, Frontier or HighNoon, or download TumbStone for offline play and analysis.</p>
     </div>
     <section id="tumbstone-web" aria-labelledby="tumbstone-web-title">
       <div class="section-heading"><h2 id="tumbstone-web-title">TumbStone</h2><span class="tag">Web · Gated RL rung 5</span></div>
@@ -90,6 +90,13 @@
         <a class="web-choice" href="tumbstone/lab11/"><svg id="ts11" viewBox="0 0 190 176" aria-hidden="true"></svg><div><strong>Size 11 →</strong><span>331 cells · Play or analyze</span></div></a>
       </div>
       <p class="section-copy">The network was trained on sizes 6 and 8; sizes 10 and 11 are experimental.</p>
+    </section>
+    <section id="frontier-web" aria-labelledby="frontier-title">
+      <div class="section-heading"><h2 id="frontier-title">Frontier</h2><span class="tag">Web</span></div>
+      <p class="section-copy">Choose your opponent’s humanity, from stronger search to human imitation.</p>
+      <div class="web-choices">
+        <a class="web-choice" href="https://tumbstone-human-frontier.sleekmug513.chatgpt.site/"><svg id="frontier8" viewBox="0 0 190 176" aria-hidden="true"></svg><div><strong>Size 8 →</strong><span>169 cells · Adjustable humanity</span></div></a>
+      </div>
     </section>
     <section id="highnoon" aria-labelledby="highnoon-title">
       <div class="section-heading"><h2 id="highnoon-title">HighNoon</h2><span class="tag">Web</span></div>
@@ -201,6 +208,7 @@
     }
     document.getElementById(id).innerHTML=paths;
   }
+  board('frontier8',8);
   board('b6',6);
   board('b8',8);
   board('ts6',6);
