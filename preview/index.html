@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f3e8"><title>HighNoon</title>
+  <meta name="description" content="Play Tumbleweed your way. Human styles, the JesseJames challenge, and HighNoon analysis in one place.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="style.css"><link rel="stylesheet" href="experience.css">
+</head>
+<body>
+  <header class="app-header">
+    <a id="home-link" class="brand" href="./" aria-label="HighNoon home"><span class="brand-sun" aria-hidden="true">✺</span><span>HighNoon<small>TUMBLEWEED</small></span></a>
+    <nav class="mode-switch" aria-label="Workspace"><button id="mode-play" aria-pressed="true">Play</button><button id="mode-analyze" aria-pressed="false">Analyze</button></nav>
+    <span class="preview-label">Preview</span>
+  </header>
+  <section id="welcome" class="welcome" aria-labelledby="welcome-title">
+    <p class="eyebrow">TUMBLEWEED, AT YOUR PACE</p><h1 id="welcome-title">Welcome to HighNoon.</h1>
+    <p>Play a game. Take a closer look.</p>
+    <div class="welcome-choices">
+      <button id="welcome-new" class="welcome-choice"><span class="choice-symbol" aria-hidden="true">⬡</span><strong>New game</strong><span>Choose an opponent and play.</span><span class="choice-arrow" aria-hidden="true">→</span></button>
+      <button id="welcome-analyze" class="welcome-choice"><span class="choice-symbol" aria-hidden="true">⌕</span><strong>Analyze a game</strong><span>Explore positions with HighNoon.</span><span class="choice-arrow" aria-hidden="true">→</span></button>
+    </div>
+    <button id="welcome-continue" class="continue-game" hidden>Continue your game →</button>
+  </section>
+  <main hidden>
+    <section class="board-panel" aria-label="Tumbleweed board">
+      <div class="board-heading"><div class="opponent-summary"><img id="active-avatar" src="avatars/unknown.jpg" alt=""><div><h2 id="active-name">Human imitation</h2><p id="mode-label">Play</p><p id="search-speed" role="status">— sims/s</p></div></div><strong id="turn" role="status">Loading board…</strong><span id="size-label"></span></div>
+      <div id="play-result" hidden>
+        <div role="status" aria-atomic="true"><p id="result-text"></p><p id="result-score"></p><p id="result-next" hidden></p></div>
+        <button id="next-game" class="primary">Play again</button>
+      </div>
+      <div id="view-modes" class="view-modes" role="group" aria-label="Board display" hidden><button data-view="normal" aria-pressed="false">Normal</button><button data-view="ownership" aria-pressed="true">Ownership</button><button data-view="visits" aria-pressed="false">Visits</button><button data-view="margin" aria-pressed="false">Margin</button><button data-view="difference" aria-pressed="false" title="Where the move played and the engine's choice end differently">Difference</button></div>
+      <p id="preview-context" class="small" role="status"></p>
+      <svg id="board" role="group" aria-label="Tumbleweed board" viewBox="0 0 600 600"></svg>
+      <div id="ownership-legend" class="legend" hidden><span>White</span><span class="ownership-gradient"></span><span>Red</span></div>
+      <div id="margin-legend" class="legend" hidden><span>Loss against recommended move</span><span class="loss-scale"><span class="loss-gradient"></span><span class="loss-ticks"><span>0</span><span>5</span><span>10+ cells</span></span></span></div>
+      <div id="difference-legend" class="legend" hidden><span class="difference-key better" id="difference-better"></span><span class="difference-key played" id="difference-played"></span><span id="difference-note"></span><button id="clear-preview" hidden>Clear preview</button></div>
+      <div class="board-actions" id="setup-actions" hidden>
+        <button id="undo-setup">Undo placement</button><button id="computer-setup">Let your opponent set up</button>
+        <button id="finish-setup" class="primary" hidden>Offer position</button>
+        <span id="choose-colour" hidden><button id="pick-red">Play Red</button><button id="pick-white">Play White</button></span>
+      </div>
+      <div class="board-actions"><button id="pass" hidden>Pass</button></div>
+      <p id="board-note" class="small" role="status"></p>
+    </section>
+    <aside>
+      <section id="play-panel" class="play-panel">
+        <p class="eyebrow">YOUR NEXT GAME</p><h1 id="play-title">Play your way</h1><p id="play-description"></p>
+        <div id="challenge-info" hidden><div class="handicap-number"><strong id="challenge-handicap">6</strong><span>Red starting stacks</span></div><p>Win to play with one fewer. Lose to get one more.</p><p id="challenge-record" class="small"></p></div>
+        <button id="resign" class="quiet" hidden>Resign game</button>
+      </section>
+      <nav class="game-menu" aria-label="Game controls"><button id="new-game">New game</button><button id="edit-position">Edit position</button><button id="settings">Settings</button></nav>
+      <section id="editor" hidden>
+        <h2>Edit position</h2>
+        <fieldset class="brushes"><legend>Stack</legend><label><input type="radio" name="brush" value="1" checked> Red</label><label><input type="radio" name="brush" value="2"> White</label><label><input type="radio" name="brush" value="3"> Neutral</label><label><input type="radio" name="brush" value="0"> Erase</label></fieldset>
+        <label>Height <input id="stack-height" type="number" min="1" max="6" value="1"></label>
+        <label>Side to move <select id="editor-turn"><option value="1">Red</option><option value="2">White</option></select></label>
+        <label>Engine plays <select id="editor-engine"><option value="1">Red</option><option value="2" selected>White</option></select></label>
+        <div class="controls"><button id="editor-undo">Undo edit</button><button id="editor-clear">Clear board</button><button id="editor-centre">Neutral centre</button></div>
+        <div class="controls"><button id="editor-play" class="primary">Play this position</button><button id="editor-analyze">Analyze</button><button id="editor-cancel">Cancel</button></div>
+      </section>
+      <section id="search-panel"><p id="engine-status" class="small" role="status"></p><p id="score" role="status"></p>
+        <div id="search-progress" hidden><div class="progress-track" role="progressbar" aria-label="Search visits" aria-valuemin="0" aria-valuemax="1000" aria-valuenow="0"><span class="decision-window"></span><span id="progress-fill"></span><span class="halfway-marker"></span></div><div class="progress-window-label"><span>Early-finish window</span></div></div>
+        <p id="search-stats" class="small"></p><p id="search-profile" class="small" hidden></p><div class="controls"><button id="search">Search position</button><button id="write-commentary">Write commentary</button><button id="stop" disabled>Stop</button></div></section>
+      <section class="history" id="history-panel" aria-label="Score and game history">
+        <h2>Expected margin <span class="small">cells · positive favours Red</span></h2>
+        <svg id="margin-graph" viewBox="0 0 600 200" role="slider" tabindex="0" aria-label="Game position and expected margin" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" preserveAspectRatio="none"></svg>
+        <div class="controls"><button id="back" aria-label="Previous move">←</button><input id="timeline" type="range" min="0" max="0" value="0" aria-label="Game position"><button id="forward" aria-label="Next move">→</button></div><p id="move-number" class="small">Initial position</p><p id="graph-note" class="small" hidden>✗ mistake · ? questionable · ✓ good move. Click a mark to have the move explained.</p>
+      </section>
+      <nav id="side-tabs" class="tabs" aria-label="Commentary" hidden><button id="tab-game" data-tab="game">Game</button><button id="tab-move" data-tab="move">Move</button></nav>
+      <section id="game-panel" aria-label="Review of the game" hidden>
+        <div class="controls"><button id="review-game">Write commentary</button><span id="review-status" class="small" role="status"></span></div>
+        <div id="review-progress" class="progress-track" role="progressbar" aria-label="Review" aria-valuemin="0" aria-valuemax="100" hidden><span id="review-fill"></span></div>
+        <div id="game-text"></div>
+      </section>
+      <section id="explain-panel" aria-label="Explanation of the move played" hidden>
+        <div class="controls"><button id="explain">Explain move</button><span id="explain-status" class="small" role="status"></span></div>
+        <div id="explain-progress" class="progress-track" role="progressbar" aria-label="Explanation" aria-valuemin="0" aria-valuemax="100" hidden><span id="explain-fill"></span></div>
+        <div id="explain-text"></div>
+      </section>
+      <section class="position-panel"><div class="record-heading"><label for="moves">Game record</label><label id="record-size-label">Board <select id="record-size" aria-label="Board size of the game to load"><option value="6">6</option><option value="8" selected>8</option></select></label></div><textarea id="moves" rows="3" spellcheck="false" placeholder="Paste starting cells and moves, or a saved review…"></textarea><div class="controls"><button id="copy">Copy</button><button id="load">Load</button><button id="analyze-game" aria-pressed="false" hidden>Analyze game</button></div><p id="game-analysis-status" class="small" role="status"></p></section>
+      <section id="analysis-panel" hidden>
+        <h2>Candidate moves <span id="candidate-side" class="small"></span></h2>
+        <div class="table-wrap"><table aria-label="Candidate moves"><thead><tr><th>Move</th><th id="visits-heading" colspan="2">Visits</th><th>Margin</th><th aria-label="Play variation"></th></tr></thead><tbody id="candidates"></tbody></table></div>
+        <p id="variation" class="small"></p>
+      </section>
+      <p id="error" role="alert"></p>
+    </aside>
+  </main>
+  <dialog id="new-dialog" aria-labelledby="new-title">
+    <form id="new-form">
+      <div class="dialog-heading"><h2 id="new-title">New game</h2><button type="button" class="close" data-close="new-dialog" aria-label="Cancel">×</button></div>
+      <p class="dialog-intro">Find your kind of game.</p>
+      <fieldset class="engine-picker"><legend class="sr-only">How would you like to play?</legend>
+        <label class="engine-card"><input type="radio" name="opponent" value="human" checked><img id="human-card-avatar" src="avatars/unknown.jpg" alt=""><strong>Human imitation</strong><span class="engine-tagline">A familiar kind of opponent</span></label>
+        <label class="engine-card"><input type="radio" name="opponent" value="jesse"><img src="avatars/jessejames.png" alt=""><strong>Challenge</strong><span class="engine-tagline">Find your level with JesseJames</span></label>
+        <label class="engine-card"><input type="radio" name="opponent" value="highnoon"><img src="avatars/highnoon.png" alt=""><strong>HighNoon</strong><span class="engine-tagline">Take on the engine</span></label>
+      </fieldset>
+      <section id="human-options" class="opponent-options">
+        <div class="profile-preview"><img id="profile-avatar" src="avatars/unknown.jpg" alt=""><div><strong id="profile-name">Level 6</strong><p id="profile-description"></p></div></div>
+        <label for="human-profile">Your opponent</label><select id="human-profile" name="profile"></select>
+      </section>
+      <section id="challenge-options" class="opponent-options" hidden><h3>A head start. A real challenge.</h3><p>Place <strong id="new-handicap">6</strong> Red 1-stacks anywhere on the board. JesseJames places White and you play from there.</p><p class="small">Win: one fewer starting stack next time. Lose: one more. JesseJames always uses 256 simulations per move. Progress stays on this device.</p></section>
+      <section id="highnoon-options" class="opponent-options" hidden><h3>Meet HighNoon.</h3><p>A compact engine with a model for each board: mc014 on size 6, mc014s8 on size 8.</p><p class="small">Adjust its thinking effort in Settings.</p></section>
+      <input type="hidden" name="opening" value="0">
+      <fieldset class="quick-options sizes"><legend>Board size</legend>
+        <label><input type="radio" name="size" value="6"><span>6</span></label><label><input type="radio" name="size" value="8" checked><span>8</span></label>
+      </fieldset>
+      <button id="new-submit" type="submit" class="primary go">Start a game</button>
+    </form>
+  </dialog>
+  <dialog id="settings-dialog" aria-labelledby="settings-title"><form id="settings-form">
+    <div class="dialog-heading"><h2 id="settings-title">Settings</h2><button type="button" class="close" data-close="settings-dialog" aria-label="Close settings">×</button></div>
+    <label>HighNoon simulations per move <input id="tumbstone-sims" type="number" min="1" max="100000" value="256" required></label>
+    <p class="small">Used for play and position analysis. Commentary uses 600 simulations per key position and 24 for threats. The challenge stays at 256.</p>
+    <div hidden><input id="humanity" value="0.8"><output id="humanity-value"></output><input id="jesse-sims" value="256"></div>
+    <label class="check"><input id="sound" type="checkbox" checked> Move sound</label>
+    <button class="primary" type="submit">Apply</button>
+  </form></dialog>
+  <dialog id="resign-dialog" aria-labelledby="resign-title"><h2 id="resign-title">Resign this game?</h2><p>Your opponent will win. In a challenge, you get one more starting stack next time.</p><div class="controls"><button data-close="resign-dialog">Keep playing</button><button id="confirm-resign" class="primary">Resign</button></div></dialog>
+  <dialog id="continue-dialog" aria-labelledby="continue-title">
+    <div class="dialog-heading"><h2 id="continue-title">Continue playing</h2><button class="close" data-close="continue-dialog" aria-label="Cancel">×</button></div>
+    <p>The board is different from where you stopped. Choose where to continue.</p>
+    <div class="continue-options">
+      <button id="continue-saved" class="continue-option primary"><strong id="continue-saved-label">Resume saved game</strong><span id="continue-saved-detail"></span></button>
+      <button id="continue-current" class="continue-option"><strong>Play current position</strong><span id="continue-current-detail"></span></button>
+    </div>
+    <button data-close="continue-dialog">Cancel</button>
+  </dialog>
+  <script src="position.js"></script><script src="openings.js"></script><script src="human-policy.js"></script>
+  <script src="review-board.js"></script><script src="review-detect.js"></script><script src="review-levels.js"></script><script src="review-select.js"></script><script src="review-words.js"></script><script src="review-sheets.js"></script><script src="review-view.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
