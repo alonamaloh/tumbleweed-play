@@ -1232,7 +1232,7 @@ async function initializeExperience(){
   picker.value=prefs.profile;
   const showProfile=()=>{
     const p=humanProfiles.find(p=>p.key===picker.value);
-    for(const id of ["profile-avatar","human-card-avatar"])$(id).src=p?.avatar||"avatars/unknown.jpg";
+    $("human-card-avatar").src=p?.avatar||"avatars/unknown.jpg";
     $("profile-name").textContent=p?.name||"Human imitation";
     $("profile-description").textContent=p?.generic?"Choose from thirteen levels of human play.":"An imitation of their play, shared with their permission.";
   };

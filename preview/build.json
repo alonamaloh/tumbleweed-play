@@ -6,8 +6,8 @@
   },
   "files": {
     "app.js": {
-      "bytes": 94349,
-      "sha256": "6687b4ee6d4eb42dd79726d31b2e3e3cb5918f3fd00d3ad5e46fa6b81d682aa7"
+      "bytes": 94311,
+      "sha256": "de0494fae4501437fb8c5f18186a7df8433b6b191bc6496e04a0d059807e5426"
     },
     "avatars/bael.jpg": {
       "bytes": 48757,
@@ -46,8 +46,8 @@
       "sha256": "1cf34a3a25e281ddaab1ec9f5ac4e9d36c88c4978894e81ca3623cccf111f5f0"
     },
     "experience.css": {
-      "bytes": 12433,
-      "sha256": "96b763ba48328514f570e413e9bf4b8c931626b6bc448e145f92d7ff2e3bd5b5"
+      "bytes": 12294,
+      "sha256": "19e9d1d8c6d640e77ed97410fa9a63d47bbd85783925c733f1e0a12a8cf61712"
     },
     "frontier.js": {
       "bytes": 2939,
@@ -98,8 +98,8 @@
       "sha256": "f29c1aab2e26eaf06ec6be4e8b1e8fd16f4b044ad8b796aae07c21e8ee183d78"
     },
     "index.html": {
-      "bytes": 15027,
-      "sha256": "670d6dc945886965163c70e3cb375bf2afd5f04d263a218ff365834a14e4aa4d"
+      "bytes": 14958,
+      "sha256": "dea151ce0df47ba39fa6bb1a18563f724680c437a20a73cae9d85a3f881db6f5"
     },
     "models/8/jesse/batch.onnx": {
       "bytes": 461460,
