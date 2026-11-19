@@ -528,8 +528,10 @@ function moveDifference(){
   return {played,other:other.move,engine:true,preview:!!selected,delta,total,mover:board._hn_stm()===1?"Red":"White",
     thin:other.samples<50||!(next?.rootOwnership&&next.visits>=50)&&!(here?.samples>=50)};
 }
+// The plain board: play, setup, the editor and the Normal display. Also the Difference display's "no difference".
+const NEUTRAL_BOARD=[238,233,221];
 function differenceColor(value){
-  const a=Math.abs(value)<.1?0:Math.min(1,2*Math.abs(value))*.8,end=value>0?[46,125,50]:[36,109,204],base=[238,233,221];
+  const a=Math.abs(value)<.1?0:Math.min(1,2*Math.abs(value))*.8,end=value>0?[46,125,50]:[36,109,204],base=NEUTRAL_BOARD;
   return `rgb(${base.map((v,i)=>Math.round(v+(end[i]-v)*a)).join(",")})`;
 }
 // The moves of an analyzed game that the review would comment on, for the marks on the plot: its mistakes and
@@ -730,7 +732,7 @@ function drawBoard(){
     const territory=mode==="editor"||mode==="setup"?0:board._hn_territory(cell);
     let value=ownership?.[cell]??0;if(territory)value=territory===1?1:-1;
     const c=byMove.get(cell),hasMargin=view==="margin"&&c?.visits>0&&Number.isFinite(c.margin);
-    const fill=view==="difference"?differenceColor(difference?.delta?.[cell]??0):hasMargin&&best?.visits?marginLossColor(best.margin-c.margin):ownershipColor(value);
+    const fill=view==="normal"?`rgb(${NEUTRAL_BOARD.join(",")})`:view==="difference"?differenceColor(difference?.delta?.[cell]??0):hasMargin&&best?.visits?marginLossColor(best.margin-c.margin):ownershipColor(value);
     const label=`${cname(cell)}${owner?`, ${["","Red","White","neutral"][owner]} stack ${height}`:", empty"}`;
     svg+=`<path class="hex${legal?" legal":""}${mode==="editor"?" editable":""}" data-cell="${cell}" tabindex="${cell===(focusedCell??0)?0:-1}" role="button" aria-label="${label}" d="${hex(x,y)}" fill="${fill}"></path>`;
     if(owner)svg+=`<circle class="stack" cx="${x}" cy="${y}" r="${radius*.60}" fill="${owner===1?"#ba4238":owner===2?"#fffefa":"#8d8575"}" stroke="#645e53"/><text class="stack-number" x="${x}" y="${y}" fill="${owner===2?"#453b34":"white"}">${height}</text>`;
